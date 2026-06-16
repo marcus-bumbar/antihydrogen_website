@@ -1,0 +1,105 @@
+import { transportLayout } from "../data/transportLayout";
+
+export type OverlayParticle = {
+  id: string;
+  x: number;
+  y: number;
+  color: string;
+  radius: number;
+  showOverlay: boolean;
+};
+
+type TransportOverlayProps = {
+  particles: OverlayParticle[];
+};
+
+function pointsToString(points: { x: number; y: number }[]) {
+  return points.map((point) => `${point.x},${point.y}`).join(" ");
+}
+
+export function TransportOverlay({ particles }: TransportOverlayProps) {
+  const { canvas, arrows } = transportLayout;
+
+  return (
+    <svg
+      viewBox={`0 0 ${canvas.width} ${canvas.height}`}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        zIndex: 3,
+        overflow: "visible",
+      }}
+    >
+      <defs>
+        <marker
+          id="blueArrow"
+          markerWidth="6"
+          markerHeight="6"
+          refX="5"
+          refY="3"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M 0 0 L 6 3 L 0 6 z" fill={arrows.antiproton.color} />
+        </marker>
+
+        <marker
+          id="redArrow"
+          markerWidth="6"
+          markerHeight="6"
+          refX="5"
+          refY="3"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M 0 0 L 6 3 L 0 6 z" fill={arrows.positronToCusp.color} />
+        </marker>
+      </defs>
+
+      <line
+        x1={arrows.antiproton.start.x}
+        y1={arrows.antiproton.start.y}
+        x2={arrows.antiproton.end.x}
+        y2={arrows.antiproton.end.y}
+        stroke={arrows.antiproton.color}
+        strokeWidth="4"
+        markerEnd="url(#blueArrow)"
+      />
+
+      <line
+        x1={arrows.positronToStacker.start.x}
+        y1={arrows.positronToStacker.start.y}
+        x2={arrows.positronToStacker.end.x}
+        y2={arrows.positronToStacker.end.y}
+        stroke={arrows.positronToStacker.color}
+        strokeWidth="4"
+        markerEnd="url(#redArrow)"
+      />
+
+      <polyline
+        points={pointsToString(arrows.positronToCusp.points)}
+        fill="none"
+        stroke={arrows.positronToCusp.color}
+        strokeWidth="4"
+        markerEnd="url(#redArrow)"
+      />
+
+      {particles
+        .filter((particle) => particle.showOverlay)
+        .map((particle) => (
+          <circle
+            key={particle.id}
+            cx={particle.x}
+            cy={particle.y}
+            r={particle.radius}
+            fill={particle.color}
+            stroke="white"
+            strokeWidth="2"
+          />
+        ))}
+    </svg>
+  );
+}

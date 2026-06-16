@@ -1,0 +1,95 @@
+import type { ComponentType, SVGProps } from "react";
+import type { Electrode } from "./electrodes";
+
+import MusashiSvg from "../assets/MUSASHI.svg?react";
+import CuspSvg from "../assets/Cusp.svg?react";
+import SourceBgtSvg from "../assets/SourceBGT.svg?react";
+import StackerSvg from "../assets/StackerMin.svg?react";
+
+export type TrapId = "musashi" | "cusp" | "sourceBgt" | "stacker";
+
+export type TrapConfig = {
+  id: TrapId;
+  name: string;
+  Svg: ComponentType<SVGProps<SVGSVGElement>>;
+  electrodes: Electrode[];
+  initialVoltages: number[];
+};
+
+const musashiElectrodes: Electrode[] = [
+  { name: "h13", left: 0.0, right: 55.0, initialVoltage: 0 },
+  { name: "h12", left: 55.0, right: 80.0, initialVoltage: 0 },
+  { name: "h11", left: 80.0, right: 105.0, initialVoltage: 0 },
+  { name: "h10", left: 105.0, right: 126.0, initialVoltage: 0 },
+  { name: "h9", left: 126.0, right: 155.0, initialVoltage: 0 },
+  { name: "h8", left: 155.0, right: 180.0, initialVoltage: 0 },
+  { name: "h7", left: 180.0, right: 230.0, initialVoltage: 0 },
+  { name: "h6", left: 230.0, right: 255.0, initialVoltage: 0 },
+  { name: "h5", left: 255.0, right: 276.0, initialVoltage: 0 },
+  { name: "h4", left: 276.0, right: 300.0, initialVoltage: 0 },
+];
+
+const cuspElectrodes: Electrode[] = [
+  { name: "u13", left: 0.0, right: 55.0, initialVoltage: 0 },
+  { name: "u12", left: 55.0, right: 80.0, initialVoltage: 0 },
+  { name: "u11", left: 80.0, right: 105.0, initialVoltage: 0 },
+  { name: "u10", left: 105.0, right: 126.0, initialVoltage: 0 },
+  { name: "u9", left: 126.0, right: 155.0, initialVoltage: 0 },
+  { name: "u8", left: 155.0, right: 180.0, initialVoltage: 0 },
+  { name: "u7", left: 180.0, right: 230.0, initialVoltage: 0 },
+  { name: "u6", left: 230.0, right: 255.0, initialVoltage: 0 },
+  { name: "u5", left: 255.0, right: 276.0, initialVoltage: 0 },
+  { name: "u4", left: 276.0, right: 300.0, initialVoltage: 0 },
+];
+
+const sourceBgtElectrodes: Electrode[] = [
+  { name: "s1", left: 0.0, right: 5.0, initialVoltage: 0 },
+  { name: "s2", left: 5.0, right: 20.0, initialVoltage: 0 },
+  { name: "s3", left: 20.0, right: 65.0, initialVoltage: 0 },
+  { name: "s4", left: 65.0, right: 125.0, initialVoltage: 0 },
+  { name: "s5", left: 125.0, right: 140.0, initialVoltage: 0 },
+  { name: "s6", left: 125.0, right: 140.0, initialVoltage: 0 },
+];
+
+
+const stackerElectrodes: Electrode[] = [
+  { name: "st1", left: 0.0, right: 40.0, initialVoltage: 0 },
+  { name: "st2", left: 40.0, right: 80.0, initialVoltage: 0 },
+  { name: "st3", left: 80.0, right: 120.0, initialVoltage: 0 },
+  { name: "st4", left: 120.0, right: 160.0, initialVoltage: 0 },
+  { name: "st5", left: 160.0, right: 200.0, initialVoltage: 0 },
+];
+
+export const traps: Record<TrapId, TrapConfig> = {
+  musashi: {
+    id: "musashi",
+    name: "MUSASHI",
+    Svg: MusashiSvg,
+    electrodes: musashiElectrodes,
+    initialVoltages: [30, 30, 30, 30, 0, 30, 30, 30, 30, 120],
+  },
+
+  cusp: {
+    id: "cusp",
+    name: "Cusp",
+    Svg: CuspSvg,
+    electrodes: cuspElectrodes,
+    initialVoltages: [100, 30, 30, 30, 0, 30, 30, 30, 30, 120],
+  },
+
+  sourceBgt: {
+    id: "sourceBgt",
+    name: "Buffer Gas Trap and Source",
+    Svg: SourceBgtSvg,
+    electrodes: sourceBgtElectrodes,
+    initialVoltages: [30, 18, 25, 25, 27, 0],
+  },
+
+  stacker: {
+    id: "stacker",
+    name: "Stacker",
+    Svg: StackerSvg,
+    electrodes: stackerElectrodes,
+    initialVoltages: [30, 10, -30, 10, 30],
+  },
+};
