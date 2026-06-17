@@ -79,6 +79,7 @@ export function TrapPanel({
         voltages={voltages}
         electrodes={trap.electrodes}
         zRange={zRange}
+        yRange={trap.potentialYAxis}
         layoutSettings={layoutSettings}
       />
     </div>

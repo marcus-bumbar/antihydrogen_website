@@ -21,7 +21,14 @@ type PotentialPlotProps = {
   particles: TrapParticleMarker[];
   voltages: number[];
   electrodes: Electrode[];
-  zRange: ZRange;
+  zRange: {
+    zMin: number;
+    zMax: number;
+  };
+  yRange: {
+    yMin: number;
+    yMax: number;
+  };
   layoutSettings: LayoutSettings;
 };
 
@@ -33,6 +40,7 @@ export function PotentialPlot({
   voltages,
   electrodes,
   zRange,
+  yRange,
   layoutSettings,
 }: PotentialPlotProps) {
   const plotRef = useRef<HTMLDivElement | null>(null);
@@ -109,7 +117,7 @@ export function PotentialPlot({
         },
         yaxis: {
           title: { text: "On Axis potential [V]" },
-          range: [-130, 130],
+          range: [yRange.yMin, yRange.yMax],
           autorange: false,
           fixedrange: true,
           showgrid: false,
@@ -143,6 +151,7 @@ export function PotentialPlot({
     voltages,
     electrodes,
     zRange,
+    yRange,
     layoutSettings,
   ]);
 

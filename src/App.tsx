@@ -40,6 +40,8 @@ const minBgtAccumulationTimeSeconds: number = 0.5;
 const maxBgtAccumulationTimeSeconds: number = 8;
 const minBgtStackCount: number = 1;
 const maxBgtStackCount: number = 20;
+const minAccumulatorToCuspTransferCount: number = 1;
+const maxAccumulatorToCuspTransferCount: number = 10;
 const autoTransferSettlingDelay = 120; // milliseconds
 
 function sourceIntervalFromActivityGBq(activityGBq: number) {
@@ -299,14 +301,6 @@ function removePopulation(
   };
 }
 
-function hasPopulation(
-  populations: PopulationMap,
-  trapId: TrapId,
-  species: Species
-) {
-  return Boolean(populations[trapId][species]);
-}
-
 function stageForTrap(trapId: TrapId, stageKey: string) {
   const stages = trapStagesByTrap[trapId] as Record<
     string,
@@ -365,6 +359,7 @@ function App() {
   const sourceActivityIntervalRef = useRef<number | null>(null);
   const storedPopulationsRef = useRef<PopulationMap>(createEmptyPopulations());
   const autoTransferRunIdRef = useRef(0);
+  const autoAccumulatorToCuspRunIdRef = useRef(0);
 
   const { canvas, panels, routes } = transportLayout;
 
@@ -377,6 +372,10 @@ function App() {
   const [bgtAccumulationTimeSeconds, setBgtAccumulationTimeSeconds] = useState(2);
   const [bgtStackCount, setBgtStackCount] = useState(5);
   const [autoTransferIsRunning, setAutoTransferIsRunning] = useState(false);
+  const [autoAccumulatorToCuspIsRunning, setAutoAccumulatorToCuspIsRunning] =
+    useState(false);
+  const [accumulatorToCuspTransferCount, setAccumulatorToCuspTransferCount] =
+    useState(3);
   const [analysisReport, setAnalysisReport] = useState<string | null>(null);
 
   const sourceActivityIntervalSeconds = sourceIntervalFromActivityGBq(sourceActivityGBq);
@@ -402,6 +401,7 @@ function App() {
       animationRefs.current.clear();
 
       autoTransferRunIdRef.current += 1;
+      autoAccumulatorToCuspRunIdRef.current += 1;
 
       if (sourceActivityIntervalRef.current !== null) {
         window.clearInterval(sourceActivityIntervalRef.current);
@@ -788,6 +788,17 @@ function runTransferOnlyIfSourceHasParticles({
     });
   }
 
+  function transferPositronsFromStackerToCusp() {
+    runTransferOnlyIfSourceHasParticles({
+      sequence: actionSequences.sendPositronsToCusp,
+      route: routes.positronsStackerToCusp,
+      species: "positron",
+      sourceTrapId: "stacker",
+      destinationTrapId: "cusp",
+      transferWholePopulation: true,
+    });
+  }
+
   async function runAutoBgtToStackerTransfers() {
     if (autoTransferIsRunning) return;
 
@@ -817,9 +828,71 @@ function runTransferOnlyIfSourceHasParticles({
     }
   }
 
-  function clearAll() {
+  function stopAutoBgtToStackerTransfers() {
     autoTransferRunIdRef.current += 1;
     setAutoTransferIsRunning(false);
+  }
+
+  function toggleAutoBgtToStackerTransfers() {
+    if (autoTransferIsRunning) {
+      stopAutoBgtToStackerTransfers();
+      return;
+    }
+
+    runAutoBgtToStackerTransfers();
+  }
+
+  async function runAutoAccumulatorToCuspTransfers() {
+    if (autoAccumulatorToCuspIsRunning) return;
+
+    const runId = autoAccumulatorToCuspRunIdRef.current + 1;
+    autoAccumulatorToCuspRunIdRef.current = runId;
+    setAutoAccumulatorToCuspIsRunning(true);
+
+    const transferDuration = Math.max(
+      (totalRouteLength(routes.positronsStackerToCusp) / particleSpeed) * 1000,
+      1
+    );
+
+    for (
+      let transferIndex = 0;
+      transferIndex < accumulatorToCuspTransferCount;
+      transferIndex += 1
+    ) {
+      if (autoAccumulatorToCuspRunIdRef.current !== runId) break;
+
+      await delay(bgtAccumulationTimeSeconds * 1000 + autoTransferSettlingDelay);
+
+      if (autoAccumulatorToCuspRunIdRef.current !== runId) break;
+
+      transferPositronsFromStackerToCusp();
+
+      await delay(transferDuration + autoTransferSettlingDelay);
+    }
+
+    if (autoAccumulatorToCuspRunIdRef.current === runId) {
+      setAutoAccumulatorToCuspIsRunning(false);
+    }
+  }
+
+  function stopAutoAccumulatorToCuspTransfers() {
+    autoAccumulatorToCuspRunIdRef.current += 1;
+    setAutoAccumulatorToCuspIsRunning(false);
+  }
+
+  function toggleAutoAccumulatorToCuspTransfers() {
+    if (autoAccumulatorToCuspIsRunning) {
+      stopAutoAccumulatorToCuspTransfers();
+      return;
+    }
+
+    runAutoAccumulatorToCuspTransfers();
+  }
+  function clearAll() {
+    autoTransferRunIdRef.current += 1;
+    autoAccumulatorToCuspRunIdRef.current += 1;
+    setAutoTransferIsRunning(false);
+    setAutoAccumulatorToCuspIsRunning(false);
     setSourceIsActive(false);
 
     if (sourceActivityIntervalRef.current !== null) {
@@ -870,50 +943,56 @@ function runTransferOnlyIfSourceHasParticles({
   }
 
   function analyzePlasma() {
-    const hasAntiprotons = hasPopulation(storedPopulations, "cusp", "antiproton");
-    const hasPositrons = hasPopulation(storedPopulations, "cusp", "positron");
+    const cuspPopulations = (
+      Object.values(storedPopulationsRef.current.cusp) as StoredPopulation[]
+    ).filter(Boolean);
 
-    if (!hasAntiprotons && !hasPositrons) {
-      setAnalysisReport("No plasma stored in the Cusp.");
+    if (cuspPopulations.length === 0) {
+      setAnalysisReport("No plasma stored in the mixing trap.");
       return;
     }
 
-    const reportLines = (["antiproton", "positron"] as Species[])
-      .map((species) => storedPopulations.cusp[species])
-      .filter(Boolean)
-      .map(
-        (population) =>
-          `${speciesLabels[population!.species]}: ${Math.round(
-            population!.particleNumber
-          ).toLocaleString()} particles`
-      );
+    const reportLines = cuspPopulations.map(
+      (population) =>
+        `${speciesLabels[population.species]}: ${Math.round(
+          population.particleNumber
+        ).toLocaleString()} particles`
+    );
 
-    setAnalysisReport(reportLines.join(" · "));
+    setAnalysisReport(reportLines.join("\n"));
 
-    if (hasAntiprotons) {
+    const antiprotonPopulation = cuspPopulations.find(
+      (population) => population.species === "antiproton"
+    );
+
+    const positronPopulation = cuspPopulations.find(
+      (population) => population.species === "positron"
+    );
+
+    setStoredPopulations((current) => ({
+      ...current,
+      cusp: {},
+    }));
+
+    if (antiprotonPopulation) {
       runAction({
         sequence: actionSequences.analyzeCuspPlasma,
         route: routes.antiprotonsCuspToUs,
         species: "antiproton",
-        source: {
-          trapId: "cusp",
-          species: "antiproton",
-        },
+        particleRadius: antiprotonPopulation.radius,
       });
     }
 
-    if (hasPositrons) {
+    if (positronPopulation) {
       runAction({
         sequence: actionSequences.analyzeCuspPlasma,
         route: routes.positronsCuspToUs,
         species: "positron",
-        source: {
-          trapId: "cusp",
-          species: "positron",
-        },
+        particleRadius: positronPopulation.radius,
       });
     }
   }
+
 
   const [busyTraps, setBusyTraps] = useState<Record<TrapId, boolean>>({
   musashi: false,
@@ -922,14 +1001,6 @@ function runTransferOnlyIfSourceHasParticles({
   stacker: false,
 });
 
-  const trapStageInfo = useMemo(() => {
-    return {
-      musashi: stageForTrap("musashi", trapStageKeys.musashi),
-      cusp: stageForTrap("cusp", trapStageKeys.cusp),
-      sourceBgt: stageForTrap("sourceBgt", trapStageKeys.sourceBgt),
-      stacker: stageForTrap("stacker", trapStageKeys.stacker),
-    };
-  }, [trapStageKeys]);
 
   const trapParticles = useMemo<Record<TrapId, TrapParticleMarker[]>>(() => {
     const result: Record<TrapId, TrapParticleMarker[]> = {
@@ -981,18 +1052,6 @@ function runTransferOnlyIfSourceHasParticles({
     }));
   }, [movingBunches]);
 
-  function populationSummary(trapId: TrapId) {
-    const populations = (
-      Object.values(storedPopulations[trapId]) as StoredPopulation[]
-    ).filter(Boolean);
-
-    if (populations.length === 0) return "empty";
-
-    return populations
-      .map((population) => `${speciesLabels[population.species]} present`)
-      .join(", ");
-  }
-
   return (
     <main
       style={{
@@ -1016,7 +1075,7 @@ function runTransferOnlyIfSourceHasParticles({
             marginBottom: "1rem",
           }}
         >
-          <ActionGroup title="MUSASHI" status={populationSummary("musashi")}>
+          <ActionGroup title="Antiproton trap">
             <ActionButton
               onClick={() =>
                 runAction({
@@ -1032,25 +1091,10 @@ function runTransferOnlyIfSourceHasParticles({
               })
               }
             >
-              Load electrons into MUSASHI
+              Load electrons
             </ActionButton>
 
-            <ActionButton
-              onClick={() =>
-                runAction({
-                  preSequence: actionSequences.kickElectronsFromMusashi.slice(0, 2),
-                  sequence: actionSequences.kickElectronsFromMusashi.slice(2),
-                  route: routes.electronsOutOfMusashi,
-                  species: "electron",
-                  source: {
-                    trapId: "musashi",
-                    species: "electron",
-                  },
-                })
-              }
-            >
-              Kick out electrons from MUSASHI
-            </ActionButton>
+
 
             <ActionButton
               onClick={() =>
@@ -1067,7 +1111,24 @@ function runTransferOnlyIfSourceHasParticles({
                 })
               }
             >
-              Trap antiprotons in MUSASHI
+              Trap antiprotons 
+            </ActionButton>
+
+            <ActionButton
+              onClick={() =>
+                runAction({
+                  preSequence: actionSequences.kickElectronsFromMusashi.slice(0, 2),
+                  sequence: actionSequences.kickElectronsFromMusashi.slice(2),
+                  route: routes.electronsOutOfMusashi,
+                  species: "electron",
+                  source: {
+                    trapId: "musashi",
+                    species: "electron",
+                  },
+                })
+              }
+            >
+              Kick out electrons
             </ActionButton>
 
             <ActionButton
@@ -1082,20 +1143,17 @@ function runTransferOnlyIfSourceHasParticles({
                 })
               }
             >
-              Transfer antiprotons from MUSASHI to the Cusp
+              Transfer antiprotons to the mixing trap
             </ActionButton>
           </ActionGroup>
 
-          <ActionGroup
-            title="Buffer Gas Trap and Source"
-            status={populationSummary("sourceBgt")}
-          >
+          <ActionGroup title="Positron system">
             <div style={{ display: "grid", gap: "0.35rem" }}>
               <ToggleSwitch
                 checked={sourceIsActive}
                 onChange={toggleSourceToBgt}
               >
-                Positrons from source to BGT
+                Turn on positron system
               </ToggleSwitch>
 
               <label
@@ -1130,7 +1188,7 @@ function runTransferOnlyIfSourceHasParticles({
                   fontSize: "0.85rem",
                 }}
               >
-                BGT accumulation time: {bgtAccumulationTimeSeconds.toFixed(1)} s
+                Cycle time: {bgtAccumulationTimeSeconds.toFixed(1)} s
                 <input
                   type="range"
                   min={minBgtAccumulationTimeSeconds}
@@ -1142,8 +1200,7 @@ function runTransferOnlyIfSourceHasParticles({
                   }
                 />
                 <span style={{ color: "#64748b", fontSize: "0.78rem" }}>
-                  Auto transfer waits this long before each BGT → Stacker transfer.
-                  The source toggle stays user-controlled.
+                  cycles to accumulator
                 </span>
               </label>
 
@@ -1155,7 +1212,7 @@ function runTransferOnlyIfSourceHasParticles({
                   fontSize: "0.85rem",
                 }}
               >
-                stacks BGT → Stacker: {bgtStackCount}
+                Accumulator: {bgtStackCount}
                 <input
                   type="range"
                   min={minBgtStackCount}
@@ -1170,35 +1227,52 @@ function runTransferOnlyIfSourceHasParticles({
             </div>
 
             <ActionButton onClick={transferPositronsFromBgtToStacker}>
-              Positrons from BGT to Stacker
+              Positrons from Positron system to accumulator
             </ActionButton>
 
-            <ActionButton
-              onClick={runAutoBgtToStackerTransfers}
-              disabled={autoTransferIsRunning}
-            >
-              {autoTransferIsRunning ? "Auto transfer running…" : "Auto transfer"}
-            </ActionButton>
+          <ToggleSwitch
+            checked={autoTransferIsRunning}
+            onChange={toggleAutoBgtToStackerTransfers}
+          >
+            Auto transfer to Accumulator
+          </ToggleSwitch>
           </ActionGroup>
 
-          <ActionGroup title="Stacker" status={populationSummary("stacker")}>
-            <ActionButton
-              onClick={() =>
-                runTransferOnlyIfSourceHasParticles({
-                  sequence: actionSequences.sendPositronsToCusp,
-                  route: routes.positronsStackerToCusp,
-                  species: "positron",
-                  sourceTrapId: "stacker",
-                  destinationTrapId: "cusp",
-                  transferWholePopulation: true,
-                })
-              }
-            >
-              Positrons from Stacker to Cusp
+          <ActionGroup title="Accumulator">
+            <ActionButton onClick={transferPositronsFromStackerToCusp}>
+              Send positrons to the mixing trap
             </ActionButton>
+
+            <label
+              style={{
+                display: "grid",
+                gap: "0.25rem",
+                color: "#475569",
+                fontSize: "0.85rem",
+              }}
+            >
+              Transfers to mixing trap: {accumulatorToCuspTransferCount}
+              <input
+                type="range"
+                min={minAccumulatorToCuspTransferCount}
+                max={maxAccumulatorToCuspTransferCount}
+                step="1"
+                value={accumulatorToCuspTransferCount}
+                onChange={(event) =>
+                  setAccumulatorToCuspTransferCount(Number(event.target.value))
+                }
+              />
+            </label>
+
+            <ToggleSwitch
+              checked={autoAccumulatorToCuspIsRunning}
+              onChange={toggleAutoAccumulatorToCuspTransfers}
+            >
+              Auto transfer to mixing trap
+            </ToggleSwitch>
           </ActionGroup>
 
-          <ActionGroup title="Cusp" status={populationSummary("cusp")}>
+          <ActionGroup title="Mixing trap">
             <ActionButton
               onClick={() =>
                 runAction({
@@ -1213,7 +1287,7 @@ function runTransferOnlyIfSourceHasParticles({
                 })
               }
             >
-              Load electrons into the Cusp
+              Load electrons
             </ActionButton>
 
             <ActionButton
@@ -1229,7 +1303,7 @@ function runTransferOnlyIfSourceHasParticles({
                 })
               }
             >
-              Kick out electrons from the Cusp
+              Kick out electrons 
             </ActionButton>
 
             <ActionButton onClick={mixPositronsAndAntiprotons}>
@@ -1247,6 +1321,7 @@ function runTransferOnlyIfSourceHasParticles({
                   background: "white",
                   color: "#334155",
                   fontSize: "0.85rem",
+                  whiteSpace: "pre-line",
                 }}
               >
                 {analysisReport}
@@ -1284,8 +1359,6 @@ function runTransferOnlyIfSourceHasParticles({
             <TrapPanel
               trap={traps[trapId]}
               voltages={trapVoltages[trapId]}
-              stageName={trapStageInfo[trapId].name}
-              stageDescription={trapStageInfo[trapId].description}
               particles={trapParticles[trapId]}
               layoutSettings={layoutSettings}
             />
@@ -1302,7 +1375,7 @@ function ActionGroup({
   children,
 }: {
   title: string;
-  status: string;
+  status?: string;
   children: ReactNode;
 }) {
   return (
@@ -1316,15 +1389,17 @@ function ActionGroup({
     >
       <h2 style={{ margin: "0 0 0.25rem", fontSize: "1rem" }}>{title}</h2>
 
-      <div
-        style={{
-          color: "#475569",
-          fontSize: "0.9rem",
-          marginBottom: "0.75rem",
-        }}
-      >
-        Stored: {status}
-      </div>
+      {status && (
+        <div
+          style={{
+            color: "#475569",
+            fontSize: "0.9rem",
+            marginBottom: "0.75rem",
+          }}
+        >
+          Stored: {status}
+        </div>
+      )}
 
       <div style={{ display: "grid", gap: "0.5rem" }}>{children}</div>
     </section>

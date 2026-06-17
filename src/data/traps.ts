@@ -14,6 +14,10 @@ export type TrapConfig = {
   Svg: ComponentType<SVGProps<SVGSVGElement>>;
   electrodes: Electrode[];
   initialVoltages: number[];
+  potentialYAxis: {
+    yMin: number;
+    yMax: number;
+  };
 };
 
 const musashiElectrodes: Electrode[] = [
@@ -67,6 +71,10 @@ export const traps: Record<TrapId, TrapConfig> = {
     Svg: MusashiSvg,
     electrodes: musashiElectrodes,
     initialVoltages: [30, 30, 30, 30, 0, 30, 30, 30, 30, 120],
+    potentialYAxis: {
+      yMin: 80,
+      yMax: -400,
+    },
   },
 
   cusp: {
@@ -75,6 +83,10 @@ export const traps: Record<TrapId, TrapConfig> = {
     Svg: CuspSvg,
     electrodes: cuspElectrodes,
     initialVoltages: [100, 30, 30, 30, 0, 30, 30, 30, 30, 120],
+    potentialYAxis: {
+      yMin: -130,
+      yMax: 130,
+    },
   },
 
   sourceBgt: {
@@ -83,6 +95,10 @@ export const traps: Record<TrapId, TrapConfig> = {
     Svg: SourceBgtSvg,
     electrodes: sourceBgtElectrodes,
     initialVoltages: [30, 18, 25, 25, 27, 0],
+    potentialYAxis: {
+      yMin: -50,
+      yMax: 50,
+    },
   },
 
   stacker: {
@@ -91,5 +107,9 @@ export const traps: Record<TrapId, TrapConfig> = {
     Svg: StackerSvg,
     electrodes: stackerElectrodes,
     initialVoltages: [30, 10, -30, 10, 30],
+    potentialYAxis: {
+      yMin: -50,
+      yMax: 50,
+    },
   },
 };
