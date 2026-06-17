@@ -3,7 +3,7 @@ import type { Electrode } from "./electrodes";
 
 import MusashiSvg from "../assets/MUSASHI.svg?react";
 import CuspSvg from "../assets/Cusp.svg?react";
-import SourceBgtSvg from "../assets/SourceBGT.svg?react";
+import SourceBgtSvg from "../assets/BGT.svg?react";
 import StackerSvg from "../assets/StackerMin.svg?react";
 
 export type TrapId = "musashi" | "cusp" | "sourceBgt" | "stacker";
@@ -63,7 +63,7 @@ const stackerElectrodes: Electrode[] = [
 export const traps: Record<TrapId, TrapConfig> = {
   musashi: {
     id: "musashi",
-    name: "MUSASHI",
+    name: "Antiproton trap",
     Svg: MusashiSvg,
     electrodes: musashiElectrodes,
     initialVoltages: [30, 30, 30, 30, 0, 30, 30, 30, 30, 120],
@@ -71,7 +71,7 @@ export const traps: Record<TrapId, TrapConfig> = {
 
   cusp: {
     id: "cusp",
-    name: "Cusp",
+    name: "Mixing trap",
     Svg: CuspSvg,
     electrodes: cuspElectrodes,
     initialVoltages: [100, 30, 30, 30, 0, 30, 30, 30, 30, 120],
@@ -79,7 +79,7 @@ export const traps: Record<TrapId, TrapConfig> = {
 
   sourceBgt: {
     id: "sourceBgt",
-    name: "Buffer Gas Trap and Source",
+    name: "Positron system",
     Svg: SourceBgtSvg,
     electrodes: sourceBgtElectrodes,
     initialVoltages: [30, 18, 25, 25, 27, 0],
@@ -87,7 +87,7 @@ export const traps: Record<TrapId, TrapConfig> = {
 
   stacker: {
     id: "stacker",
-    name: "Stacker",
+    name: "Accumulator",
     Svg: StackerSvg,
     electrodes: stackerElectrodes,
     initialVoltages: [30, 10, -30, 10, 30],

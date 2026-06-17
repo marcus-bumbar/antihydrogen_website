@@ -39,11 +39,24 @@ export const transportLayout = {
     sourceBgt: {
       left: 1000,
       top: 550,
-      width: 500,
+      width: 300,
     },
   } satisfies Record<TrapId, { left: number; top: number; width: number }>,
 
+
+    source: {
+    positron: {
+      x: 1400,
+      y: 675,
+      width: 80,
+      height: 80,
+      label: "Positron source",
+      labelOffsetY: -58,
+    },
+  },
+
   arrows: {
+
     antiproton: {
       color: "#2564eb6e",
       start: { x: 500, y: 170 },

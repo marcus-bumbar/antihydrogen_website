@@ -16,8 +16,6 @@ type LayoutSettings = {
 type TrapPanelProps = {
   trap: TrapConfig;
   voltages: number[];
-  stageName: string;
-  stageDescription: string;
   particles: TrapParticleMarker[];
   layoutSettings: LayoutSettings;
 };
@@ -25,8 +23,6 @@ type TrapPanelProps = {
 export function TrapPanel({
   trap,
   voltages,
-  stageName,
-  stageDescription,
   particles,
   layoutSettings,
 }: TrapPanelProps) {
@@ -63,12 +59,9 @@ export function TrapPanel({
         background: "white",
       }}
     >
-      <h2 style={{ marginTop: 0, marginBottom: "0.25rem" }}>{trap.name}</h2>
-      <div style={{ fontSize: "0.9rem", color: "#475569", minHeight: "2.6em" }}>
-        <strong>{stageName}</strong>
-        <br />
-        {stageDescription}
-      </div>
+      <h2 style={{ marginTop: 0, marginBottom: "1.25rem" }}>
+        {trap.name}
+      </h2>
 
       <ElectrodeStack
         title="Electrode stack"
