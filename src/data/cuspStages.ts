@@ -10,34 +10,55 @@ export const cuspStages = {
 
   loadElectrons1: {
     name: "Load Cusp e− 1",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [0, 0, 0, 0, 0, 0, -100, 0, 0, 0],
     description: "Open Cusp for electron loading.",
   },
   loadElectrons2: {
     name: "Load Cusp e− 2",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [-0, 0, 0, 0, 0, 0, -100, 0, 0, 0],
     description: "Compress electrons in the Cusp.",
   },
   loadElectrons3: {
     name: "Load Cusp e− 3",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [-50, 0, 0, 0, 0, 0, -100, 0, 0, 0],
+    description: "Electrons are trapped in the Cusp.",
+  },
+  loadElectrons4: {
+    name: "Load Cusp e− 4",
+    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
+    description: "Electrons are trapped in the Cusp.",
+  },
+  loadElectrons5: {
+    name: "Load Cusp e− 5",
+    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Electrons are trapped in the Cusp.",
   },
 
+
   kickElectrons1: {
     name: "Kick Cusp e− 1",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Prepare Cusp electron ejection.",
   },
   kickElectrons2: {
     name: "Kick Cusp e− 2",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [-100, 0, 50, -100, 0, 0, -100, 0, 0, 0],
     description: "Lower one barrier.",
   },
   kickElectrons3: {
     name: "Kick Cusp e− 3",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [-100, 0, 0, -100, 0, 0, -100, 0, 0, 0],
+    description: "Electrons up",
+  },
+  kickElectrons4: {
+    name: "Kick Cusp e− 4",
+    voltages: [0, 0, 0, -100, 0, 0, -100, 0, 0, 0],
     description: "Electrons leave the Cusp.",
+  },
+  kickElectrons5: {
+    name: "Kick Cusp e− 5",
+    voltages: [-100, 0, 0, -100, 0, 0, -100, 0, 0, 0],
+    description: "close pbar well",
   },
 
   receiveAntiprotons1: {
@@ -58,7 +79,7 @@ export const cuspStages = {
 
   receivePositrons1: {
     name: "Receive e+ 1",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [80, 30, 30, 30, 30, 30, 30, 30, 30, 80],
     description: "Open Cusp for incoming positrons.",
   },
   receivePositrons2: {

@@ -31,7 +31,7 @@ const layoutSettings = {
 
 const particleSpeed = 300; // pixels per second
 const stageOnlyDuration = 1800; // milliseconds
-const voltageMorphDuration = 520; // milliseconds
+const voltageMorphDuration = 300; // milliseconds
 const minSourceActivityGBq: number = 0;
 const maxSourceActivityGBq: number = 1.85;
 const minSourceIntervalSeconds: number = 0.5;
@@ -1410,7 +1410,8 @@ function runTransferOnlyIfSourceHasParticles({
             <ActionButton
               onClick={() =>
                 runAction({
-                  sequence: actionSequences.loadElectronsIntoCusp,
+                  preSequence: actionSequences.loadElectronsIntoCusp.slice(0, 2),
+                  sequence: actionSequences.loadElectronsIntoCusp.slice(2),
                   route: routes.electronsIntoCusp,
                   species: "electron",
                   destination: {
@@ -1431,7 +1432,8 @@ function runTransferOnlyIfSourceHasParticles({
                   species: "electron",
                   action: () =>
                     runAction({
-                      sequence: actionSequences.kickElectronsFromCusp,
+                      preSequence: actionSequences.loadElectronsIntoCusp.slice(0, 2),
+                      sequence: actionSequences.loadElectronsIntoCusp.slice(2),
                       route: routes.electronsOutOfCuspToUs,
                       species: "electron",
                       source: {

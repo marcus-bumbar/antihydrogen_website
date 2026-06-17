@@ -62,14 +62,18 @@ export const actionSequences = {
 
   loadElectronsIntoCusp: [
     { trapId: "cusp", stageKey: "loadElectrons1", at: 0.0 },
-    { trapId: "cusp", stageKey: "loadElectrons2", at: 0.5 },
-    { trapId: "cusp", stageKey: "loadElectrons3", at: 1.0 },
+    { trapId: "cusp", stageKey: "loadElectrons2", at: 0.0 },
+    { trapId: "cusp", stageKey: "loadElectrons3", at: 0.35 },
+    { trapId: "cusp", stageKey: "loadElectrons4", at: 0.7 },
+    { trapId: "cusp", stageKey: "loadElectrons5", at: 1.0 },
   ],
 
   kickElectronsFromCusp: [
     { trapId: "cusp", stageKey: "kickElectrons1", at: 0.0 },
-    { trapId: "cusp", stageKey: "kickElectrons2", at: 0.5 },
-    { trapId: "cusp", stageKey: "kickElectrons3", at: 1.0 },
+    { trapId: "cusp", stageKey: "kickElectrons2", at: 0.2 },
+    { trapId: "cusp", stageKey: "kickElectrons3", at: 0.4 },
+    { trapId: "cusp", stageKey: "kickElectrons4", at: 0.6 },
+    { trapId: "cusp", stageKey: "kickElectrons5", at: 1.0 },
   ],
 
   mixPositronsAndAntiprotons: [
