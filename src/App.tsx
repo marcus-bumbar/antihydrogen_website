@@ -43,6 +43,17 @@ const maxBgtStackCount: number = 20;
 const minAccumulatorToCuspTransferCount: number = 1;
 const maxAccumulatorToCuspTransferCount: number = 10;
 const autoTransferSettlingDelay = 120; // milliseconds
+const electronKickRemovalFraction = 0.8;
+
+const antiprotonMusashiTrapFractionWithoutElectrons = 0.1;
+const antiprotonCuspTrapFractionWithoutElectrons = 0.3;
+const antiprotonCuspTransferFractionWithManyElectrons = 0.5;
+const cuspElectronThresholdForReducedAntiprotonTransfer = 100_000;
+
+const positronBgtToAccumulatorTransferFraction = 1.0;
+const positronAccumulatorToCuspTransferFraction = 1.0;
+
+const minimumRemainingParticleNumber = 1;
 
 function sourceIntervalFromActivityGBq(activityGBq: number) {
   const normalized =
@@ -98,6 +109,7 @@ type ActionConfig = {
     trapId: TrapId;
     species: Species;
     amount?: number;
+    particleFraction?: number;
   };
 
   destination?: {
@@ -298,6 +310,60 @@ function removePopulation(
   return {
     ...populations,
     [trapId]: nextTrapPopulations,
+  };
+}
+
+function clampFraction(fraction: number) {
+  return Math.min(Math.max(fraction, 0), 1);
+}
+
+function removePopulationFraction(
+  populations: PopulationMap,
+  trapId: TrapId,
+  species: Species,
+  fractionToRemove: number
+): PopulationMap {
+  const existing = populations[trapId][species];
+  if (!existing) return populations;
+
+  const clampedFraction = clampFraction(fractionToRemove);
+  const remainingParticleNumber =
+    existing.particleNumber * (1 - clampedFraction);
+  const remainingGrowthInput = existing.growthInput * (1 - clampedFraction);
+  const nextTrapPopulations = { ...populations[trapId] };
+
+  if (
+    remainingParticleNumber <= minimumRemainingParticleNumber ||
+    remainingGrowthInput <= 0
+  ) {
+    delete nextTrapPopulations[species];
+  } else {
+    const settings = particleGrowthSettingsForTrap(species, trapId);
+
+    nextTrapPopulations[species] = {
+      ...existing,
+      growthInput: remainingGrowthInput,
+      particleNumber: remainingParticleNumber,
+      radius: radiusFromParticleNumber(remainingParticleNumber, settings),
+    };
+  }
+
+  return {
+    ...populations,
+    [trapId]: nextTrapPopulations,
+  };
+}
+
+function preservedPopulationPayload(
+  particleNumber: number,
+  species: Species,
+  trapId: TrapId
+) {
+  const settings = particleGrowthSettingsForTrap(species, trapId);
+
+  return {
+    particleNumber,
+    radius: radiusFromParticleNumber(particleNumber, settings),
   };
 }
 
@@ -564,14 +630,23 @@ function App() {
         }
 
         if (config.source) {
-          setStoredPopulations((current) =>
-            removePopulation(
+          setStoredPopulations((current) => {
+            if (config.source!.particleFraction !== undefined) {
+              return removePopulationFraction(
+                current,
+                config.source!.trapId,
+                config.source!.species,
+                config.source!.particleFraction
+              );
+            }
+
+            return removePopulation(
               current,
               config.source!.trapId,
               config.source!.species,
               config.source!.amount ?? 1
-            )
-          );
+            );
+          });
         }
 
         function animate(currentTime: number) {
@@ -686,6 +761,99 @@ function App() {
         return next;
       });
     }
+
+    function runActionOnlyIfPopulationExists({
+      trapId,
+      species,
+      action,
+    }: {
+      trapId: TrapId;
+      species: Species;
+      action: () => void;
+    }) {
+      const population = storedPopulationsRef.current[trapId][species];
+
+      if (!population) return;
+
+      action();
+    }
+
+  function particleRadiusForTrapParticleNumber(
+    particleNumber: number,
+    species: Species,
+    trapId: TrapId
+  ) {
+    return radiusFromParticleNumber(
+      particleNumber,
+      particleGrowthSettingsForTrap(species, trapId)
+    );
+  }
+
+  function musashiAntiprotonTrappingFraction() {
+    const electronsInMusashi =
+      storedPopulationsRef.current.musashi.electron?.particleNumber ?? 0;
+
+    return electronsInMusashi > 0
+      ? 1
+      : antiprotonMusashiTrapFractionWithoutElectrons;
+  }
+
+  function cuspAntiprotonTransferFraction() {
+    const electronsInCusp =
+      storedPopulationsRef.current.cusp.electron?.particleNumber ?? 0;
+
+    if (electronsInCusp <= 0) {
+      return antiprotonCuspTrapFractionWithoutElectrons;
+    }
+
+    if (electronsInCusp >= cuspElectronThresholdForReducedAntiprotonTransfer) {
+      return antiprotonCuspTransferFractionWithManyElectrons;
+    }
+
+    return 1;
+  }
+
+  function trapAntiprotonsInMusashi() {
+    const trappingFraction = musashiAntiprotonTrappingFraction();
+    const fullMetrics = populationMetricsForTrap(1, "antiproton", "musashi");
+    const trappedParticleNumber =
+      fullMetrics.particleNumber * trappingFraction;
+    const trappedRadius = particleRadiusForTrapParticleNumber(
+      trappedParticleNumber,
+      "antiproton",
+      "musashi"
+    );
+
+    runAction({
+      preSequence: actionSequences.trapAntiprotonsInMusashi.slice(0, 2),
+      sequence: actionSequences.trapAntiprotonsInMusashi.slice(2),
+      route: routes.antiprotonsIntoMusashi,
+      species: "antiproton",
+      particleRadius: trappedRadius,
+      destination: {
+        trapId: "musashi",
+        species: "antiproton",
+        z: getLastTrapZ(routes.antiprotonsIntoMusashi, "musashi"),
+        growthInput: trappingFraction,
+        particleNumber: trappedParticleNumber,
+        radius: trappedRadius,
+      },
+    });
+  }
+
+  function transferAntiprotonsFromMusashiToCusp() {
+    runTransferOnlyIfSourceHasParticles({
+      preSequence: actionSequences.transferAntiprotonsToCusp.slice(0, 2),
+      sequence: actionSequences.transferAntiprotonsToCusp.slice(2),
+      route: routes.antiprotonsMusashiToCusp,
+      species: "antiproton",
+      sourceTrapId: "musashi",
+      destinationTrapId: "cusp",
+      transferFraction: cuspAntiprotonTransferFraction(),
+    });
+  }
+
+
   function runSourceToBgtPulse() {
     runAction({
       sequence: actionSequences.loadPositronsIntoSourceBgt,
@@ -712,7 +880,7 @@ function runTransferOnlyIfSourceHasParticles({
   species,
   sourceTrapId,
   destinationTrapId,
-  transferWholePopulation = false,
+  transferFraction = 1,
 }: {
   preSequence?: StageStep[];
   sequence?: StageStep[];
@@ -721,32 +889,26 @@ function runTransferOnlyIfSourceHasParticles({
   species: Species;
   sourceTrapId: TrapId;
   destinationTrapId: TrapId;
-  transferWholePopulation?: boolean;
+  transferFraction?: number;
 }) {
     const sourcePopulation = storedPopulationsRef.current[sourceTrapId][species];
-    const sourceHasParticles = Boolean(sourcePopulation);
-    const growthInputToTransfer = sourceHasParticles
-      ? transferWholePopulation
-        ? sourcePopulation!.growthInput
-        : 1
-      : 0;
-    const particleNumberToTransfer = sourceHasParticles
-      ? transferWholePopulation
-        ? sourcePopulation!.particleNumber
-        : populationMetricsForTrap(
-            growthInputToTransfer,
-            species,
-            sourceTrapId
-          ).particleNumber
-      : 0;
-    const movingRadius = sourceHasParticles
-      ? transferWholePopulation
-        ? sourcePopulation!.radius
-        : radiusFromParticleNumber(
-            particleNumberToTransfer,
-            particleGrowthSettingsForTrap(species, sourceTrapId)
-          )
-      : 0;
+
+    if (!sourcePopulation) return;
+
+    const clampedTransferFraction = clampFraction(transferFraction);
+
+    const particleNumberToTransfer =
+      sourcePopulation.particleNumber * clampedTransferFraction;
+    const growthInputToTransfer =
+      sourcePopulation.growthInput * clampedTransferFraction;
+
+    if (particleNumberToTransfer <= minimumRemainingParticleNumber) return;
+
+    const movingRadius = particleRadiusForTrapParticleNumber(
+      particleNumberToTransfer,
+      species,
+      sourceTrapId
+    );
 
     runAction({
       preSequence,
@@ -755,25 +917,19 @@ function runTransferOnlyIfSourceHasParticles({
       route,
       species,
       particleRadius: movingRadius,
-      source: sourceHasParticles
-        ? {
-            trapId: sourceTrapId,
-            species,
-            amount: growthInputToTransfer,
-          }
-        : undefined,
-      destination: sourceHasParticles
-        ? {
-            trapId: destinationTrapId,
-            species,
-            z: getLastTrapZ(route, destinationTrapId),
-            growthInput: growthInputToTransfer,
-            particleNumber: transferWholePopulation
-              ? sourcePopulation!.particleNumber
-              : undefined,
-            radius: transferWholePopulation ? sourcePopulation!.radius : undefined,
-          }
-        : undefined,
+      source: {
+        trapId: sourceTrapId,
+        species,
+        particleFraction: clampedTransferFraction,
+      },
+      destination: {
+        trapId: destinationTrapId,
+        species,
+        z: getLastTrapZ(route, destinationTrapId),
+        growthInput: growthInputToTransfer,
+        particleNumber: particleNumberToTransfer,
+        radius: movingRadius,
+      },
     });
   }
 
@@ -784,7 +940,7 @@ function runTransferOnlyIfSourceHasParticles({
       species: "positron",
       sourceTrapId: "sourceBgt",
       destinationTrapId: "stacker",
-      transferWholePopulation: true,
+      transferFraction: positronBgtToAccumulatorTransferFraction,
     });
   }
 
@@ -795,7 +951,7 @@ function runTransferOnlyIfSourceHasParticles({
       species: "positron",
       sourceTrapId: "stacker",
       destinationTrapId: "cusp",
-      transferWholePopulation: true,
+      transferFraction: positronAccumulatorToCuspTransferFraction,
     });
   }
 
@@ -1096,53 +1252,34 @@ function runTransferOnlyIfSourceHasParticles({
 
 
 
-            <ActionButton
-              onClick={() =>
-                runAction({
-                  preSequence: actionSequences.trapAntiprotonsInMusashi.slice(0, 2),
-                  sequence: actionSequences.trapAntiprotonsInMusashi.slice(2),
-                  route: routes.antiprotonsIntoMusashi,
-                  species: "antiproton",
-                  destination: {
-                    trapId: "musashi",
-                    species: "antiproton",
-                    z: getLastTrapZ(routes.antiprotonsIntoMusashi, "musashi"),
-                  },
-                })
-              }
-            >
-              Trap antiprotons 
+            <ActionButton onClick={trapAntiprotonsInMusashi}>
+              Trap antiprotons
             </ActionButton>
 
             <ActionButton
               onClick={() =>
-                runAction({
-                  preSequence: actionSequences.kickElectronsFromMusashi.slice(0, 2),
-                  sequence: actionSequences.kickElectronsFromMusashi.slice(2),
-                  route: routes.electronsOutOfMusashi,
+                runActionOnlyIfPopulationExists({
+                  trapId: "musashi",
                   species: "electron",
-                  source: {
-                    trapId: "musashi",
-                    species: "electron",
-                  },
+                  action: () =>
+                    runAction({
+                      preSequence: actionSequences.kickElectronsFromMusashi.slice(0, 2),
+                      sequence: actionSequences.kickElectronsFromMusashi.slice(2),
+                      route: routes.electronsOutOfMusashi,
+                      species: "electron",
+                      source: {
+                        trapId: "musashi",
+                        species: "electron",
+                        particleFraction: electronKickRemovalFraction,
+                      },
+                    }),
                 })
               }
             >
               Kick out electrons
             </ActionButton>
 
-            <ActionButton
-              onClick={() =>
-                runTransferOnlyIfSourceHasParticles({
-                  preSequence: actionSequences.transferAntiprotonsToCusp.slice(0, 2),
-                  sequence: actionSequences.transferAntiprotonsToCusp.slice(2),
-                  route: routes.antiprotonsMusashiToCusp,
-                  species: "antiproton",
-                  sourceTrapId: "musashi",
-                  destinationTrapId: "cusp",
-                })
-              }
-            >
+            <ActionButton onClick={transferAntiprotonsFromMusashiToCusp}>
               Transfer antiprotons to the mixing trap
             </ActionButton>
           </ActionGroup>
@@ -1175,9 +1312,6 @@ function runTransferOnlyIfSourceHasParticles({
                     setSourceActivityGBq(Number(event.target.value))
                   }
                 />
-                <span style={{ color: "#64748b", fontSize: "0.78rem" }}>
-                  pulse interval: {sourceActivityIntervalSeconds.toFixed(2)} s
-                </span>
               </label>
 
               <label
@@ -1292,18 +1426,24 @@ function runTransferOnlyIfSourceHasParticles({
 
             <ActionButton
               onClick={() =>
-                runAction({
-                  sequence: actionSequences.kickElectronsFromCusp,
-                  route: routes.electronsOutOfCuspToUs,
+                runActionOnlyIfPopulationExists({
+                  trapId: "cusp",
                   species: "electron",
-                  source: {
-                    trapId: "cusp",
-                    species: "electron",
-                  },
+                  action: () =>
+                    runAction({
+                      sequence: actionSequences.kickElectronsFromCusp,
+                      route: routes.electronsOutOfCuspToUs,
+                      species: "electron",
+                      source: {
+                        trapId: "cusp",
+                        species: "electron",
+                        particleFraction: electronKickRemovalFraction,
+                      },
+                    }),
                 })
               }
             >
-              Kick out electrons 
+              Kick out electrons
             </ActionButton>
 
             <ActionButton onClick={mixPositronsAndAntiprotons}>

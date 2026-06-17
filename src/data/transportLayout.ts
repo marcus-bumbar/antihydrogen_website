@@ -59,23 +59,23 @@ export const transportLayout = {
 
     antiproton: {
       color: "#2564eb6e",
-      start: { x: 500, y: 170 },
-      end: { x: 1000, y: 170 },
+      start: { x: 500, y: 130 },
+      end: { x: 1000, y: 130 },
     },
 
     positronToStacker: {
       color: "#ef444463",
-      start: { x: 1000, y: 749 },
-      end: { x: 950, y: 749 },
+      start: { x: 1000, y: 675 },
+      end: { x: 950, y: 675 },
     },
 
     positronToCusp: {
       color: "#ef444463",
       points: [
-        { x: 650, y: 749 },
-        { x: 550, y: 749 },
-        { x: 550, y: 175 },
-        { x: 1000, y: 175 },
+        { x: 650, y: 675 },
+        { x: 610, y: 675 },
+        { x: 610, y: 135 },
+        { x: 1000, y: 135 },
       ],
     },
   },
@@ -117,16 +117,16 @@ export const transportLayout = {
 
     antiprotonsMusashiToCusp: [
       {
-        start: { x: 520, y: 173 },
-        end: { x: 960, y: 173 },
+        start: { x: 520, y: 130 },
+        end: { x: 960, y: 130 },
         trapId: "musashi",
         trapZStart: 160,
         trapZEnd: 260,
         showOverlay: false,
       },
       {
-        start: { x: 520, y: 173 },
-        end: { x: 1000, y: 173 },
+        start: { x: 520, y: 130 },
+        end: { x: 1000, y: 130 },
         trapId: "musashi",
         trapZStart: 300,
         trapZEnd: 900,
@@ -144,16 +144,16 @@ export const transportLayout = {
 
     antiprotonsCuspToUs: [
       {
-        start: { x: 1120, y: 230 },
-        end: { x: 500, y: 230 },
+        start: { x: 1120, y: 130 },
+        end: { x: 500, y: 130 },
         trapId: "cusp",
         trapZStart: 110,
         trapZEnd: -20,
         showOverlay: false,
       },
       {
-        start: { x: 960, y: 230 },
-        end: { x: 850, y: 230 },
+        start: { x: 960, y: 130 },
+        end: { x: 850, y: 130 },
         trapId: "cusp",
         trapZStart: 20,
         trapZEnd: -80,
@@ -214,24 +214,24 @@ export const transportLayout = {
     ],
     positronsStackerToCusp: [
       {
-        start: { x: 680, y: 750  },
-        end: { x: 600, y: 750 },
+        start: { x: 650, y: 750  },
+        end: { x: 650, y: 750 },
         trapId: "stacker",
         trapZStart: 100,
         trapZEnd: 0,
         showOverlay: false,
       },
       { 
-        start: { x: 550, y: 750 },
-        end: { x: 550, y: 175 },
+        start: { x: 610, y: 650 },
+        end: { x: 610, y: 130 },
         trapId: "cusp",
         trapZStart: -100,
         trapZEnd: -50,
         showOverlay: true,
       },
      { 
-        start: { x: 550, y: 175 },
-        end: { x: 1000, y: 175 },
+        start: { x: 610, y: 130 },
+        end: { x: 1000, y: 130 },
         trapId: "cusp",
         trapZStart: -100,
         trapZEnd: -40,
