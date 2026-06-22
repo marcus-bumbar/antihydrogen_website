@@ -19,6 +19,13 @@ import {
   TransportOverlay,
   type OverlayParticle,
 } from "./components/TransportOverlay";
+import {
+  animationQueues,
+  type ButtonLockId,
+  type QueuedActionStep,
+  type QueuedAnimation,
+  type QueuedParticleMove,
+} from "./data/animationQueues";
 
 const layoutSettings = {
   contentWidth: `${transportLayout.canvas.width}px`,
@@ -31,7 +38,7 @@ const layoutSettings = {
 
 const particleSpeed = 300; // pixels per second
 const stageOnlyDuration = 1800; // milliseconds
-const voltageMorphDuration = 300; // milliseconds
+const voltageMorphDuration = 520; // milliseconds
 const minSourceActivityGBq: number = 0;
 const maxSourceActivityGBq: number = 1.85;
 const minSourceIntervalSeconds: number = 0.5;
@@ -418,6 +425,23 @@ function getLastTrapZ(route: RouteSegment[], trapId: TrapId) {
   return 0;
 }
 
+function trapInternalRoute(
+  trapId: TrapId,
+  zStart: number,
+  zEnd: number
+): RouteSegment[] {
+  return [
+    {
+      start: { x: 0, y: 0 },
+      end: { x: 0, y: 0 },
+      trapId,
+      trapZStart: zStart,
+      trapZEnd: zEnd,
+      showOverlay: false,
+    },
+  ];
+}
+
 function App() {
   const animationRefs = useRef<Set<number>>(new Set());
   const voltageAnimationRefs = useRef<Partial<Record<TrapId, number>>>({});
@@ -443,6 +467,11 @@ function App() {
   const [accumulatorToCuspTransferCount, setAccumulatorToCuspTransferCount] =
     useState(3);
   const [analysisReport, setAnalysisReport] = useState<string | null>(null);
+
+  const lockedButtonsRef = useRef<Set<ButtonLockId>>(new Set());
+  const [lockedButtons, setLockedButtons] = useState<Set<ButtonLockId>>(
+    () => new Set()
+  );
 
   const sourceActivityIntervalSeconds = sourceIntervalFromActivityGBq(sourceActivityGBq);
 
@@ -778,6 +807,190 @@ function App() {
       action();
     }
 
+
+  type QueuedRuntimeOptions = {
+    particleRadiusBySpecies?: Partial<Record<Species, number>>;
+    onComplete?: () => void;
+  };
+
+  function isButtonLocked(buttonId: ButtonLockId) {
+    return lockedButtons.has(buttonId);
+  }
+
+  function anyButtonLocked(buttonIds: readonly ButtonLockId[]) {
+    return buttonIds.some((buttonId) =>
+      lockedButtonsRef.current.has(buttonId)
+    );
+  }
+
+  function setButtonLocks(
+    buttonIds: readonly ButtonLockId[],
+    shouldLock: boolean
+  ) {
+    const next = new Set(lockedButtonsRef.current);
+
+    buttonIds.forEach((buttonId) => {
+      if (shouldLock) {
+        next.add(buttonId);
+      } else {
+        next.delete(buttonId);
+      }
+    });
+
+    lockedButtonsRef.current = next;
+    setLockedButtons(next);
+  }
+
+  async function runLockedQueuedAnimation(
+    animation: QueuedAnimation,
+    options: QueuedRuntimeOptions = {}
+  ) {
+    const lockedButtonIds = animation.lockedButtons ?? [];
+
+    if (anyButtonLocked(lockedButtonIds)) return;
+
+    setButtonLocks(lockedButtonIds, true);
+
+    try {
+      await runQueuedAction(animation.steps, options);
+      options.onComplete?.();
+    } finally {
+      setButtonLocks(lockedButtonIds, false);
+    }
+  }
+
+  async function runQueuedAction(
+    steps: QueuedActionStep[],
+    options: QueuedRuntimeOptions = {}
+  ) {
+    for (const step of steps) {
+      if (step.type === "stage") {
+        await runStageChange(step);
+      }
+
+      if (step.type === "move") {
+        await runParallelParticleMove(step, options);
+      }
+
+      if (step.type === "wait") {
+        await delay(step.duration);
+      }
+
+      if (step.type === "parallel") {
+        await Promise.all(
+          step.steps.map((parallelStep) =>
+            runQueuedAction([parallelStep], options)
+          )
+        );
+      }
+    }
+  }
+
+  function runStageChange({
+    trapId,
+    stageKey,
+    duration,
+  }: {
+    trapId: TrapId;
+    stageKey: string;
+    duration: number;
+  }) {
+    return new Promise<void>((resolve) => {
+      setTrapStageKeys((current) => ({
+        ...current,
+        [trapId]: stageKey,
+      }));
+
+      const nextStage = stageForTrap(trapId, stageKey);
+      morphTrapVoltages(trapId, nextStage.voltages, duration);
+
+      window.setTimeout(resolve, duration);
+    });
+  }
+
+  function runParallelParticleMove(
+    {
+      particles,
+      duration,
+    }: {
+      particles: QueuedParticleMove[];
+      duration: number;
+    },
+    options: QueuedRuntimeOptions = {}
+  ) {
+    return new Promise<void>((resolve) => {
+      const movingIds = particles.map(
+        (particle) =>
+          particle.id ?? `${particle.species}-${crypto.randomUUID()}`
+      );
+
+      const initialBunches = particles.map((particle, index) =>
+        bunchStateFromRoute(
+          {
+            id: movingIds[index],
+            species: particle.species,
+            color: speciesColors[particle.species],
+            radius:
+              particle.particleRadius ??
+              options.particleRadiusBySpecies?.[particle.species] ??
+              10,
+            route: particle.route,
+          },
+          0
+        )
+      );
+
+      setMovingBunches((current) => [...current, ...initialBunches]);
+
+      const startTime = performance.now();
+
+      function animate(currentTime: number) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        const nextBunches = particles.map((particle, index) =>
+          bunchStateFromRoute(
+            {
+              id: movingIds[index],
+              species: particle.species,
+              color: speciesColors[particle.species],
+              radius:
+                particle.particleRadius ??
+                options.particleRadiusBySpecies?.[particle.species] ??
+                10,
+              route: particle.route,
+            },
+            progress
+          )
+        );
+
+        setMovingBunches((current) =>
+          current.map((bunch) => {
+            const replacement = nextBunches.find(
+              (nextBunch) => nextBunch.id === bunch.id
+            );
+
+            return replacement ?? bunch;
+          })
+        );
+
+        if (progress < 1) {
+          const frameId = requestAnimationFrame(animate);
+          animationRefs.current.add(frameId);
+        } else {
+          setMovingBunches((current) =>
+            current.filter((bunch) => !movingIds.includes(bunch.id))
+          );
+
+          resolve();
+        }
+      }
+
+      const frameId = requestAnimationFrame(animate);
+      animationRefs.current.add(frameId);
+    });
+  }
+
   function particleRadiusForTrapParticleNumber(
     particleNumber: number,
     species: Species,
@@ -812,31 +1025,37 @@ function App() {
 
     return 1;
   }
-
   function trapAntiprotonsInMusashi() {
     const trappingFraction = musashiAntiprotonTrappingFraction();
     const fullMetrics = populationMetricsForTrap(1, "antiproton", "musashi");
     const trappedParticleNumber =
       fullMetrics.particleNumber * trappingFraction;
+
     const trappedRadius = particleRadiusForTrapParticleNumber(
       trappedParticleNumber,
       "antiproton",
       "musashi"
     );
 
-    runAction({
-      preSequence: actionSequences.trapAntiprotonsInMusashi.slice(0, 2),
-      sequence: actionSequences.trapAntiprotonsInMusashi.slice(2),
-      route: routes.antiprotonsIntoMusashi,
-      species: "antiproton",
-      particleRadius: trappedRadius,
-      destination: {
-        trapId: "musashi",
-        species: "antiproton",
-        z: getLastTrapZ(routes.antiprotonsIntoMusashi, "musashi"),
-        growthInput: trappingFraction,
-        particleNumber: trappedParticleNumber,
-        radius: trappedRadius,
+    void runLockedQueuedAnimation(animationQueues.trapAntiprotonsInMusashi, {
+      particleRadiusBySpecies: {
+        antiproton: trappedRadius,
+      },
+
+      onComplete: () => {
+        setStoredPopulations((current) =>
+          addPopulation(
+            current,
+            "musashi",
+            "antiproton",
+            getLastTrapZ(routes.antiprotonsIntoMusashi, "musashi"),
+            trappingFraction,
+            {
+              particleNumber: trappedParticleNumber,
+              radius: trappedRadius,
+            }
+          )
+        );
       },
     });
   }
@@ -1233,6 +1452,7 @@ function runTransferOnlyIfSourceHasParticles({
         >
           <ActionGroup title="Antiproton trap">
             <ActionButton
+              disabled={isButtonLocked("musashi.loadElectrons")}
               onClick={() =>
                 runAction({
                 preSequence: actionSequences.loadElectronsIntoMusashi.slice(0, 2),
@@ -1252,11 +1472,15 @@ function runTransferOnlyIfSourceHasParticles({
 
 
 
-            <ActionButton onClick={trapAntiprotonsInMusashi}>
+            <ActionButton
+              disabled={isButtonLocked("musashi.trapAntiprotons")}
+              onClick={trapAntiprotonsInMusashi}
+            >
               Trap antiprotons
             </ActionButton>
 
             <ActionButton
+              disabled={isButtonLocked("musashi.kickElectrons")}
               onClick={() =>
                 runActionOnlyIfPopulationExists({
                   trapId: "musashi",
@@ -1279,7 +1503,10 @@ function runTransferOnlyIfSourceHasParticles({
               Kick out electrons
             </ActionButton>
 
-            <ActionButton onClick={transferAntiprotonsFromMusashiToCusp}>
+            <ActionButton
+              disabled={isButtonLocked("musashi.transferAntiprotons")}
+              onClick={transferAntiprotonsFromMusashiToCusp}
+            >
               Transfer antiprotons to the mixing trap
             </ActionButton>
           </ActionGroup>
@@ -1410,8 +1637,7 @@ function runTransferOnlyIfSourceHasParticles({
             <ActionButton
               onClick={() =>
                 runAction({
-                  preSequence: actionSequences.loadElectronsIntoCusp.slice(0, 2),
-                  sequence: actionSequences.loadElectronsIntoCusp.slice(2),
+                  sequence: actionSequences.loadElectronsIntoCusp,
                   route: routes.electronsIntoCusp,
                   species: "electron",
                   destination: {
@@ -1432,8 +1658,7 @@ function runTransferOnlyIfSourceHasParticles({
                   species: "electron",
                   action: () =>
                     runAction({
-                      preSequence: actionSequences.loadElectronsIntoCusp.slice(0, 2),
-                      sequence: actionSequences.loadElectronsIntoCusp.slice(2),
+                      sequence: actionSequences.kickElectronsFromCusp,
                       route: routes.electronsOutOfCuspToUs,
                       species: "electron",
                       source: {

@@ -29,8 +29,8 @@ const musashiElectrodes: Electrode[] = [
   { name: "h8", left: 155.0, right: 180.0, initialVoltage: 0 },
   { name: "h7", left: 180.0, right: 230.0, initialVoltage: 0 },
   { name: "h6", left: 230.0, right: 255.0, initialVoltage: 0 },
-  { name: "h5", left: 255.0, right: 276.0, initialVoltage: 0 },
-  { name: "h4", left: 276.0, right: 300.0, initialVoltage: 0 },
+  { name: "h5", left: 255.0, right: 300.0, initialVoltage: 0 },
+  { name: "h4", left: 245.0, right: 300.0, initialVoltage: 0 },
 ];
 
 const cuspElectrodes: Electrode[] = [
