@@ -51,6 +51,16 @@ const minAccumulatorToCuspTransferCount: number = 1;
 const maxAccumulatorToCuspTransferCount: number = 10;
 const autoTransferSettlingDelay = 120; // milliseconds
 const electronKickRemovalFraction = 0.8;
+const minMusashiToCuspTransferCount = 1;
+const maxMusashiToCuspTransferCount = 5;
+
+const antiprotonMusashiToCuspTransferFractions: Record<number, number> = {
+  1: 0.7,
+  2: 0.83,
+  3: 0.95,
+  4: 0.98,
+  5: 0.99,
+};
 
 const antiprotonMusashiTrapFractionWithoutElectrons = 0.1;
 const antiprotonCuspTrapFractionWithoutElectrons = 0.3;
@@ -324,6 +334,16 @@ function clampFraction(fraction: number) {
   return Math.min(Math.max(fraction, 0), 1);
 }
 
+function musashiToCuspTransferFractionForCount(transferCount: number) {
+  const roundedCount = Math.round(transferCount);
+  const clampedCount = Math.min(
+    Math.max(roundedCount, minMusashiToCuspTransferCount),
+    maxMusashiToCuspTransferCount
+  );
+
+  return antiprotonMusashiToCuspTransferFractions[clampedCount] ?? 0;
+}
+
 function removePopulationFraction(
   populations: PopulationMap,
   trapId: TrapId,
@@ -442,6 +462,24 @@ function trapInternalRoute(
   ];
 }
 
+function repeatQueuedAnimation(
+  animation: QueuedAnimation,
+  repeatCount: number
+): QueuedAnimation {
+  const clampedRepeatCount = Math.min(
+    Math.max(Math.round(repeatCount), 1),
+    maxMusashiToCuspTransferCount
+  );
+
+  return {
+    ...animation,
+    steps: Array.from(
+      { length: clampedRepeatCount },
+      () => animation.steps
+    ).flat(),
+  };
+}
+
 function App() {
   const animationRefs = useRef<Set<number>>(new Set());
   const voltageAnimationRefs = useRef<Partial<Record<TrapId, number>>>({});
@@ -466,6 +504,7 @@ function App() {
     useState(false);
   const [accumulatorToCuspTransferCount, setAccumulatorToCuspTransferCount] =
     useState(3);
+  const [musashiToCuspTransferCount, setMusashiToCuspTransferCount] = useState(1);
   const [analysisReport, setAnalysisReport] = useState<string | null>(null);
 
   const lockedButtonsRef = useRef<Set<ButtonLockId>>(new Set());
@@ -872,8 +911,20 @@ function App() {
         await runParallelParticleMove(step, options);
       }
 
+      if (step.type === "resetTrap") {
+        await runTrapPopulationReset(step);
+      }
+
+      if (step.type === "removePopulationFraction") {
+        runQueuedPopulationFractionRemoval(step);
+      }
+
       if (step.type === "wait") {
         await delay(step.duration);
+      }
+
+      if (step.type === "sequence") {
+        await runQueuedAction(step.steps, options);
       }
 
       if (step.type === "parallel") {
@@ -991,6 +1042,96 @@ function App() {
     });
   }
 
+function resetExitZForTrap(trapId: TrapId) {
+  const leftEdge = Math.min(
+    ...traps[trapId].electrodes.map((electrode) => electrode.left)
+  );
+
+  return leftEdge - 35;
+}
+
+function runTrapPopulationReset({
+  trapId,
+  duration,
+  preserveSpecies = [],
+}: {
+  trapId: TrapId;
+  duration: number;
+  preserveSpecies?: Species[];
+}) {
+  const preservedSpeciesSet = new Set<Species>(preserveSpecies);
+
+  const populationsToReset = Object.values(
+    storedPopulationsRef.current[trapId]
+  ).filter(
+    (population): population is StoredPopulation =>
+      Boolean(population) && !preservedSpeciesSet.has(population.species)
+  );
+
+  if (populationsToReset.length === 0) {
+    return Promise.resolve();
+  }
+
+  const particles: QueuedParticleMove[] = populationsToReset.map(
+    (population) => ({
+      id: `reset-${population.id}-${crypto.randomUUID()}`,
+      species: population.species,
+      particleRadius: population.radius,
+      route: trapInternalRoute(
+        trapId,
+        population.z,
+        resetExitZForTrap(trapId)
+      ),
+    })
+  );
+
+  const speciesToReset = new Set(
+    populationsToReset.map((population) => population.species)
+  );
+
+  const currentPopulations = storedPopulationsRef.current;
+  const nextTrapPopulations = { ...currentPopulations[trapId] };
+
+  speciesToReset.forEach((species) => {
+    delete nextTrapPopulations[species];
+  });
+
+  const nextPopulations = {
+    ...currentPopulations,
+    [trapId]: nextTrapPopulations,
+  };
+
+  storedPopulationsRef.current = nextPopulations;
+  setStoredPopulations(nextPopulations);
+
+  return runParallelParticleMove({
+    particles,
+    duration,
+  });
+}
+
+
+function runQueuedPopulationFractionRemoval({
+  trapId,
+  species,
+  fraction,
+}: {
+  trapId: TrapId;
+  species: Species;
+  fraction: number;
+}) {
+  const nextPopulations = removePopulationFraction(
+    storedPopulationsRef.current,
+    trapId,
+    species,
+    fraction
+  );
+
+  storedPopulationsRef.current = nextPopulations;
+  setStoredPopulations(nextPopulations);
+}
+
+
   function particleRadiusForTrapParticleNumber(
     particleNumber: number,
     species: Species,
@@ -1060,15 +1201,94 @@ function App() {
     });
   }
 
+  function kickElectronsFromMusashi() {
+    const electronPopulation = storedPopulationsRef.current.musashi.electron;
+
+    if (!electronPopulation) return;
+
+    const kickedParticleNumber =
+      electronPopulation.particleNumber * electronKickRemovalFraction;
+    const kickedRadius = particleRadiusForTrapParticleNumber(
+      kickedParticleNumber,
+      "electron",
+      "musashi"
+    );
+
+    void runLockedQueuedAnimation(animationQueues.kickElectronsOutOfMusashi, {
+      particleRadiusBySpecies: {
+        electron: kickedRadius,
+      },
+    });
+  }
+
   function transferAntiprotonsFromMusashiToCusp() {
-    runTransferOnlyIfSourceHasParticles({
-      preSequence: actionSequences.transferAntiprotonsToCusp.slice(0, 2),
-      sequence: actionSequences.transferAntiprotonsToCusp.slice(2),
-      route: routes.antiprotonsMusashiToCusp,
-      species: "antiproton",
-      sourceTrapId: "musashi",
-      destinationTrapId: "cusp",
-      transferFraction: cuspAntiprotonTransferFraction(),
+    const sourcePopulation = storedPopulationsRef.current.musashi.antiproton;
+
+    if (!sourcePopulation) return;
+
+    const transferCount = Math.min(
+      Math.max(Math.round(musashiToCuspTransferCount), minMusashiToCuspTransferCount),
+      maxMusashiToCuspTransferCount
+    );
+    const totalTransferFraction =
+      musashiToCuspTransferFractionForCount(transferCount);
+
+    const particleNumberToTransfer =
+      sourcePopulation.particleNumber * totalTransferFraction;
+    const growthInputToTransfer =
+      sourcePopulation.growthInput * totalTransferFraction;
+
+    if (particleNumberToTransfer <= minimumRemainingParticleNumber) return;
+
+    const repeatedTransferAnimation = repeatQueuedAnimation(
+      animationQueues.transferAntiprotonsMusashiToCusp,
+      transferCount
+    );
+
+    if (anyButtonLocked(repeatedTransferAnimation.lockedButtons ?? [])) return;
+
+    const particleNumberPerAnimation = particleNumberToTransfer / transferCount;
+    const movingRadius = particleRadiusForTrapParticleNumber(
+      particleNumberPerAnimation,
+      "antiproton",
+      "musashi"
+    );
+    const storedRadius = particleRadiusForTrapParticleNumber(
+      particleNumberToTransfer,
+      "antiproton",
+      "cusp"
+    );
+
+    const resetMusashiPopulations = {
+      ...storedPopulationsRef.current,
+      musashi: {},
+    };
+
+    storedPopulationsRef.current = resetMusashiPopulations;
+    setStoredPopulations(resetMusashiPopulations);
+
+    void runLockedQueuedAnimation(repeatedTransferAnimation, {
+      particleRadiusBySpecies: {
+        antiproton: movingRadius,
+      },
+      onComplete: () => {
+        setStoredPopulations((current) => {
+          const nextPopulations = addPopulation(
+            current,
+            "cusp",
+            "antiproton",
+            getLastTrapZ(routes.antiprotonsMusashiToCusp, "cusp"),
+            growthInputToTransfer,
+            {
+              particleNumber: particleNumberToTransfer,
+              radius: storedRadius,
+            }
+          );
+
+          storedPopulationsRef.current = nextPopulations;
+          return nextPopulations;
+        });
+      },
     });
   }
 
@@ -1451,20 +1671,24 @@ function runTransferOnlyIfSourceHasParticles({
           }}
         >
           <ActionGroup title="Antiproton trap">
+
+
+
             <ActionButton
               disabled={isButtonLocked("musashi.loadElectrons")}
               onClick={() =>
-                runAction({
-                preSequence: actionSequences.loadElectronsIntoMusashi.slice(0, 2),
-                sequence: actionSequences.loadElectronsIntoMusashi.slice(2),
-                route: routes.electronsIntoMusashi,
-                species: "electron",
-                destination: {
-                  trapId: "musashi",
-                  species: "electron",
-                  z: getLastTrapZ(routes.electronsIntoMusashi, "musashi"),
-                },
-              })
+                void runLockedQueuedAnimation(animationQueues.loadElectronsIntoMusashi, {
+                  onComplete: () => {
+                    setStoredPopulations((current) =>
+                      addPopulation(
+                        current,
+                        "musashi",
+                        "electron",
+                        getLastTrapZ(routes.electronsIntoMusashi, "musashi")
+                      )
+                    );
+                  },
+                })
               }
             >
               Load electrons
@@ -1481,27 +1705,33 @@ function runTransferOnlyIfSourceHasParticles({
 
             <ActionButton
               disabled={isButtonLocked("musashi.kickElectrons")}
-              onClick={() =>
-                runActionOnlyIfPopulationExists({
-                  trapId: "musashi",
-                  species: "electron",
-                  action: () =>
-                    runAction({
-                      preSequence: actionSequences.kickElectronsFromMusashi.slice(0, 2),
-                      sequence: actionSequences.kickElectronsFromMusashi.slice(2),
-                      route: routes.electronsOutOfMusashi,
-                      species: "electron",
-                      source: {
-                        trapId: "musashi",
-                        species: "electron",
-                        particleFraction: electronKickRemovalFraction,
-                      },
-                    }),
-                })
-              }
+              onClick={kickElectronsFromMusashi}
             >
               Kick out electrons
             </ActionButton>
+
+            <label
+              style={{
+                display: "grid",
+                gap: "0.25rem",
+                color: "#475569",
+                fontSize: "0.85rem",
+              }}
+            >
+              Antiproton transfers: {musashiToCuspTransferCount} ({Math.round(
+                musashiToCuspTransferFractionForCount(musashiToCuspTransferCount) * 100
+              )}% delivered)
+              <input
+                type="range"
+                min={minMusashiToCuspTransferCount}
+                max={maxMusashiToCuspTransferCount}
+                step="1"
+                value={musashiToCuspTransferCount}
+                onChange={(event) =>
+                  setMusashiToCuspTransferCount(Number(event.target.value))
+                }
+              />
+            </label>
 
             <ActionButton
               disabled={isButtonLocked("musashi.transferAntiprotons")}

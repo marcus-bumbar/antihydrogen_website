@@ -20,12 +20,12 @@ export const cuspStages = {
   },
   loadElectrons3: {
     name: "Load Cusp e− 3",
-    voltages: [-50, 0, 0, 0, 0, 0, -100, 0, 0, 0],
+    voltages: [0, 0, 0, 0, 0, 0, -100, 0, 0, 0],
     description: "Electrons are trapped in the Cusp.",
   },
   loadElectrons4: {
     name: "Load Cusp e− 4",
-    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
+    voltages: [-50, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Electrons are trapped in the Cusp.",
   },
   loadElectrons5: {

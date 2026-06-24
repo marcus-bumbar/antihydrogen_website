@@ -36,7 +36,7 @@ export const musashiStages = {
   },
   kickElectrons2: {
     name: "Kick e− 2",
-    voltages: [-120, -120, -20, -20, -20, -20, -20, -20, -20, -20],
+    voltages: [-120, -120, -20, -20, -20, -20, -20, -20, -0, -0],
     description: "Lower the downstream barrier.",
   },
   kickElectrons3: {
@@ -78,7 +78,7 @@ export const musashiStages = {
   },
   transferAntiprotons3: {
     name: "Transfer p̄ 3",
-    voltages: [-120, -20, -20, -20, 50, -20, -20, -20, -120, -120],
+    voltages: [-120, -20, -20, -20, -20, 50, -20, -20, -120, -120],
     description: "Antiprotons leave MUSASHI.",
   },
 } satisfies Record<string, TrapStage>;
