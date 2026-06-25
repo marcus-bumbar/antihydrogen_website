@@ -47,20 +47,10 @@ const minBgtAccumulationTimeSeconds: number = 0.5;
 const maxBgtAccumulationTimeSeconds: number = 8;
 const minBgtStackCount: number = 1;
 const maxBgtStackCount: number = 20;
-const minAccumulatorToCuspTransferCount: number = 1;
-const maxAccumulatorToCuspTransferCount: number = 10;
 const autoTransferSettlingDelay = 120; // milliseconds
 const electronKickRemovalFraction = 0.8;
 const minMusashiToCuspTransferCount = 1;
 const maxMusashiToCuspTransferCount = 5;
-
-const antiprotonMusashiToCuspTransferFractions: Record<number, number> = {
-  1: 0.7,
-  2: 0.83,
-  3: 0.95,
-  4: 0.98,
-  5: 0.99,
-};
 
 const antiprotonMusashiTrapFractionWithoutElectrons = 0.1;
 const antiprotonCuspTrapFractionWithoutElectrons = 0.3;
@@ -334,14 +324,11 @@ function clampFraction(fraction: number) {
   return Math.min(Math.max(fraction, 0), 1);
 }
 
-function musashiToCuspTransferFractionForCount(transferCount: number) {
-  const roundedCount = Math.round(transferCount);
-  const clampedCount = Math.min(
-    Math.max(roundedCount, minMusashiToCuspTransferCount),
+function clampedMusashiToCuspTransferCount(transferCount: number) {
+  return Math.min(
+    Math.max(Math.round(transferCount), minMusashiToCuspTransferCount),
     maxMusashiToCuspTransferCount
   );
-
-  return antiprotonMusashiToCuspTransferFractions[clampedCount] ?? 0;
 }
 
 function removePopulationFraction(
@@ -487,7 +474,6 @@ function App() {
   const sourceActivityIntervalRef = useRef<number | null>(null);
   const storedPopulationsRef = useRef<PopulationMap>(createEmptyPopulations());
   const autoTransferRunIdRef = useRef(0);
-  const autoAccumulatorToCuspRunIdRef = useRef(0);
 
   const { canvas, panels, routes } = transportLayout;
 
@@ -500,10 +486,6 @@ function App() {
   const [bgtAccumulationTimeSeconds, setBgtAccumulationTimeSeconds] = useState(2);
   const [bgtStackCount, setBgtStackCount] = useState(5);
   const [autoTransferIsRunning, setAutoTransferIsRunning] = useState(false);
-  const [autoAccumulatorToCuspIsRunning, setAutoAccumulatorToCuspIsRunning] =
-    useState(false);
-  const [accumulatorToCuspTransferCount, setAccumulatorToCuspTransferCount] =
-    useState(3);
   const [musashiToCuspTransferCount, setMusashiToCuspTransferCount] = useState(1);
   const [analysisReport, setAnalysisReport] = useState<string | null>(null);
 
@@ -535,7 +517,6 @@ function App() {
       animationRefs.current.clear();
 
       autoTransferRunIdRef.current += 1;
-      autoAccumulatorToCuspRunIdRef.current += 1;
 
       if (sourceActivityIntervalRef.current !== null) {
         window.clearInterval(sourceActivityIntervalRef.current);
@@ -849,6 +830,7 @@ function App() {
 
   type QueuedRuntimeOptions = {
     particleRadiusBySpecies?: Partial<Record<Species, number>>;
+    hiddenMoveSpecies?: Species[];
     onComplete?: () => void;
   };
 
@@ -916,15 +898,11 @@ function App() {
       }
 
       if (step.type === "removePopulationFraction") {
-        runQueuedPopulationFractionRemoval(step);
+        removePopulationFractionFromQueue(step);
       }
 
       if (step.type === "wait") {
         await delay(step.duration);
-      }
-
-      if (step.type === "sequence") {
-        await runQueuedAction(step.steps, options);
       }
 
       if (step.type === "parallel") {
@@ -933,6 +911,10 @@ function App() {
             runQueuedAction([parallelStep], options)
           )
         );
+      }
+
+      if (step.type === "sequence") {
+        await runQueuedAction(step.steps, options);
       }
     }
   }
@@ -969,13 +951,21 @@ function App() {
     },
     options: QueuedRuntimeOptions = {}
   ) {
+    const visibleParticles = particles.filter(
+      (particle) => !options.hiddenMoveSpecies?.includes(particle.species)
+    );
+
+    if (visibleParticles.length === 0) {
+      return delay(duration);
+    }
+
     return new Promise<void>((resolve) => {
-      const movingIds = particles.map(
+      const movingIds = visibleParticles.map(
         (particle) =>
           particle.id ?? `${particle.species}-${crypto.randomUUID()}`
       );
 
-      const initialBunches = particles.map((particle, index) =>
+      const initialBunches = visibleParticles.map((particle, index) =>
         bunchStateFromRoute(
           {
             id: movingIds[index],
@@ -999,7 +989,7 @@ function App() {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        const nextBunches = particles.map((particle, index) =>
+        const nextBunches = visibleParticles.map((particle, index) =>
           bunchStateFromRoute(
             {
               id: movingIds[index],
@@ -1110,8 +1100,7 @@ function runTrapPopulationReset({
   });
 }
 
-
-function runQueuedPopulationFractionRemoval({
+function removePopulationFractionFromQueue({
   trapId,
   species,
   fraction,
@@ -1130,7 +1119,6 @@ function runQueuedPopulationFractionRemoval({
   storedPopulationsRef.current = nextPopulations;
   setStoredPopulations(nextPopulations);
 }
-
 
   function particleRadiusForTrapParticleNumber(
     particleNumber: number,
@@ -1221,75 +1209,118 @@ function runQueuedPopulationFractionRemoval({
     });
   }
 
-  function transferAntiprotonsFromMusashiToCusp() {
+  async function transferAntiprotonsFromMusashiToCusp() {
     const sourcePopulation = storedPopulationsRef.current.musashi.antiproton;
 
     if (!sourcePopulation) return;
 
-    const transferCount = Math.min(
-      Math.max(Math.round(musashiToCuspTransferCount), minMusashiToCuspTransferCount),
-      maxMusashiToCuspTransferCount
+    const transferCount = clampedMusashiToCuspTransferCount(
+      musashiToCuspTransferCount
     );
-    const totalTransferFraction =
-      musashiToCuspTransferFractionForCount(transferCount);
+    const animation = animationQueues.transferAntiprotonsMusashiToCusp;
+    const lockedButtonIds = animation.lockedButtons ?? [];
 
-    const particleNumberToTransfer =
-      sourcePopulation.particleNumber * totalTransferFraction;
-    const growthInputToTransfer =
-      sourcePopulation.growthInput * totalTransferFraction;
+    if (anyButtonLocked(lockedButtonIds)) return;
 
-    if (particleNumberToTransfer <= minimumRemainingParticleNumber) return;
+    const particleNumberPerTransfer =
+      sourcePopulation.particleNumber / transferCount;
+    const growthInputPerTransfer = sourcePopulation.growthInput / transferCount;
 
-    const repeatedTransferAnimation = repeatQueuedAnimation(
-      animationQueues.transferAntiprotonsMusashiToCusp,
-      transferCount
-    );
+    if (particleNumberPerTransfer <= minimumRemainingParticleNumber) return;
 
-    if (anyButtonLocked(repeatedTransferAnimation.lockedButtons ?? [])) return;
-
-    const particleNumberPerAnimation = particleNumberToTransfer / transferCount;
     const movingRadius = particleRadiusForTrapParticleNumber(
-      particleNumberPerAnimation,
+      particleNumberPerTransfer,
       "antiproton",
       "musashi"
     );
-    const storedRadius = particleRadiusForTrapParticleNumber(
-      particleNumberToTransfer,
+    const cuspChunkRadius = particleRadiusForTrapParticleNumber(
+      particleNumberPerTransfer,
       "antiproton",
       "cusp"
     );
 
-    const resetMusashiPopulations = {
-      ...storedPopulationsRef.current,
-      musashi: {},
-    };
+    setButtonLocks(lockedButtonIds, true);
 
-    storedPopulationsRef.current = resetMusashiPopulations;
-    setStoredPopulations(resetMusashiPopulations);
+    try {
+      // Reset all non-antiproton populations in MUSASHI, but keep the
+      // antiproton population visible while equal chunks are transferred.
+      setStoredPopulations((current) => {
+        const nextPopulations = {
+          ...current,
+          musashi: {
+            antiproton: current.musashi.antiproton ?? sourcePopulation,
+          },
+        };
 
-    void runLockedQueuedAnimation(repeatedTransferAnimation, {
-      particleRadiusBySpecies: {
-        antiproton: movingRadius,
-      },
-      onComplete: () => {
+        storedPopulationsRef.current = nextPopulations;
+        return nextPopulations;
+      });
+
+      for (let transferIndex = 0; transferIndex < transferCount; transferIndex += 1) {
+        await runQueuedAction(animation.steps, {
+          particleRadiusBySpecies: {
+            antiproton: movingRadius,
+          },
+        });
+
+        const transferredParticleNumber =
+          particleNumberPerTransfer * (transferIndex + 1);
+        const transferredGrowthInput =
+          growthInputPerTransfer * (transferIndex + 1);
+        const remainingParticleNumber = Math.max(
+          sourcePopulation.particleNumber - transferredParticleNumber,
+          0
+        );
+        const remainingGrowthInput = Math.max(
+          sourcePopulation.growthInput - transferredGrowthInput,
+          0
+        );
+
         setStoredPopulations((current) => {
-          const nextPopulations = addPopulation(
-            current,
+          const nextMusashiPopulations: Partial<
+            Record<Species, StoredPopulation>
+          > = {};
+
+          if (
+            remainingParticleNumber > minimumRemainingParticleNumber &&
+            remainingGrowthInput > 0
+          ) {
+            nextMusashiPopulations.antiproton = {
+              ...sourcePopulation,
+              growthInput: remainingGrowthInput,
+              particleNumber: remainingParticleNumber,
+              radius: particleRadiusForTrapParticleNumber(
+                remainingParticleNumber,
+                "antiproton",
+                "musashi"
+              ),
+            };
+          }
+
+          const withReducedMusashi = {
+            ...current,
+            musashi: nextMusashiPopulations,
+          };
+
+          const withCuspChunk = addPopulation(
+            withReducedMusashi,
             "cusp",
             "antiproton",
             getLastTrapZ(routes.antiprotonsMusashiToCusp, "cusp"),
-            growthInputToTransfer,
+            growthInputPerTransfer,
             {
-              particleNumber: particleNumberToTransfer,
-              radius: storedRadius,
+              particleNumber: particleNumberPerTransfer,
+              radius: cuspChunkRadius,
             }
           );
 
-          storedPopulationsRef.current = nextPopulations;
-          return nextPopulations;
+          storedPopulationsRef.current = withCuspChunk;
+          return withCuspChunk;
         });
-      },
-    });
+      }
+    } finally {
+      setButtonLocks(lockedButtonIds, false);
+    }
   }
 
 
@@ -1311,101 +1342,158 @@ function runQueuedPopulationFractionRemoval({
     });
   }
 
-function runTransferOnlyIfSourceHasParticles({
-  preSequence,
-  sequence,
-  postSequence,
+async function runQueuedPopulationTransfer({
+  animation,
   route,
   species,
   sourceTrapId,
   destinationTrapId,
   transferFraction = 1,
 }: {
-  preSequence?: StageStep[];
-  sequence?: StageStep[];
-  postSequence?: StageStep[];
+  animation: QueuedAnimation;
   route: RouteSegment[];
   species: Species;
   sourceTrapId: TrapId;
   destinationTrapId: TrapId;
   transferFraction?: number;
 }) {
-    const sourcePopulation = storedPopulationsRef.current[sourceTrapId][species];
+  const sourcePopulation = storedPopulationsRef.current[sourceTrapId][species];
 
-    if (!sourcePopulation) return;
+  if (!sourcePopulation) {
+    await runQueuedAction(animation.steps, {
+      hiddenMoveSpecies: [species],
+    });
 
-    const clampedTransferFraction = clampFraction(transferFraction);
+    return false;
+  }
 
-    const particleNumberToTransfer =
-      sourcePopulation.particleNumber * clampedTransferFraction;
-    const growthInputToTransfer =
-      sourcePopulation.growthInput * clampedTransferFraction;
+  const clampedTransferFraction = clampFraction(transferFraction);
 
-    if (particleNumberToTransfer <= minimumRemainingParticleNumber) return;
+  const particleNumberToTransfer =
+    sourcePopulation.particleNumber * clampedTransferFraction;
+  const growthInputToTransfer =
+    sourcePopulation.growthInput * clampedTransferFraction;
 
-    const movingRadius = particleRadiusForTrapParticleNumber(
-      particleNumberToTransfer,
+  if (particleNumberToTransfer <= minimumRemainingParticleNumber) {
+    await runQueuedAction(animation.steps, {
+      hiddenMoveSpecies: [species],
+    });
+
+    return false;
+  }
+
+  const movingRadius = particleRadiusForTrapParticleNumber(
+    particleNumberToTransfer,
+    species,
+    sourceTrapId
+  );
+
+  const nextPopulations = removePopulationFraction(
+    storedPopulationsRef.current,
+    sourceTrapId,
+    species,
+    clampedTransferFraction
+  );
+
+  storedPopulationsRef.current = nextPopulations;
+  setStoredPopulations(nextPopulations);
+
+  await runQueuedAction(animation.steps, {
+    particleRadiusBySpecies: {
+      [species]: movingRadius,
+    },
+  });
+
+  setStoredPopulations((current) => {
+    const next = addPopulation(
+      current,
+      destinationTrapId,
       species,
-      sourceTrapId
-    );
-
-    runAction({
-      preSequence,
-      sequence,
-      postSequence,
-      route,
-      species,
-      particleRadius: movingRadius,
-      source: {
-        trapId: sourceTrapId,
-        species,
-        particleFraction: clampedTransferFraction,
-      },
-      destination: {
-        trapId: destinationTrapId,
-        species,
-        z: getLastTrapZ(route, destinationTrapId),
-        growthInput: growthInputToTransfer,
+      getLastTrapZ(route, destinationTrapId),
+      growthInputToTransfer,
+      {
         particleNumber: particleNumberToTransfer,
         radius: movingRadius,
-      },
-    });
-  }
-
-  function transferPositronsFromBgtToStacker() {
-    runTransferOnlyIfSourceHasParticles({
-      sequence: actionSequences.transferPositronsToStacker,
-      route: routes.positronsBgtToStacker,
-      species: "positron",
-      sourceTrapId: "sourceBgt",
-      destinationTrapId: "stacker",
-      transferFraction: positronBgtToAccumulatorTransferFraction,
-    });
-  }
-
-  function transferPositronsFromStackerToCusp() {
-    runTransferOnlyIfSourceHasParticles({
-      sequence: actionSequences.sendPositronsToCusp,
-      route: routes.positronsStackerToCusp,
-      species: "positron",
-      sourceTrapId: "stacker",
-      destinationTrapId: "cusp",
-      transferFraction: positronAccumulatorToCuspTransferFraction,
-    });
-  }
-
-  async function runAutoBgtToStackerTransfers() {
-    if (autoTransferIsRunning) return;
-
-    const runId = autoTransferRunIdRef.current + 1;
-    autoTransferRunIdRef.current = runId;
-    setAutoTransferIsRunning(true);
-
-    const transferDuration = Math.max(
-      (totalRouteLength(routes.positronsBgtToStacker) / particleSpeed) * 1000,
-      1
+      }
     );
 
+    storedPopulationsRef.current = next;
+    return next;
+  });
+
+  return true;
+}
+
+async function runLockedQueuedPopulationTransfer({
+  animation,
+  route,
+  species,
+  sourceTrapId,
+  destinationTrapId,
+  transferFraction = 1,
+}: {
+  animation: QueuedAnimation;
+  route: RouteSegment[];
+  species: Species;
+  sourceTrapId: TrapId;
+  destinationTrapId: TrapId;
+  transferFraction?: number;
+}) {
+  const lockedButtonIds = animation.lockedButtons ?? [];
+
+  if (anyButtonLocked(lockedButtonIds)) return false;
+
+  setButtonLocks(lockedButtonIds, true);
+
+  try {
+    return await runQueuedPopulationTransfer({
+      animation,
+      route,
+      species,
+      sourceTrapId,
+      destinationTrapId,
+      transferFraction,
+    });
+  } finally {
+    setButtonLocks(lockedButtonIds, false);
+  }
+}
+
+async function transferPositronsFromBgtToStacker() {
+  await runLockedQueuedPopulationTransfer({
+    animation: animationQueues.transferPositronsSourceBgtToStacker,
+    route: routes.positronsBgtToStacker,
+    species: "positron",
+    sourceTrapId: "sourceBgt",
+    destinationTrapId: "stacker",
+    transferFraction: positronBgtToAccumulatorTransferFraction,
+  });
+}
+
+async function transferPositronsFromStackerToCusp() {
+  await runLockedQueuedPopulationTransfer({
+    animation: animationQueues.transferPositronsStackerToCusp,
+    route: routes.positronsStackerToCusp,
+    species: "positron",
+    sourceTrapId: "stacker",
+    destinationTrapId: "cusp",
+    transferFraction: positronAccumulatorToCuspTransferFraction,
+  });
+}
+
+async function runAutoBgtToStackerTransfers() {
+  const animation = animationQueues.transferPositronsSourceBgtToStacker;
+  const lockedButtonIds = animation.lockedButtons ?? [];
+
+  if (autoTransferIsRunning || anyButtonLocked(lockedButtonIds)) return;
+
+  const runId = autoTransferRunIdRef.current + 1;
+  autoTransferRunIdRef.current = runId;
+
+  setAutoTransferIsRunning(true);
+  setButtonLocks(lockedButtonIds, true);
+
+  try {
     for (let stackIndex = 0; stackIndex < bgtStackCount; stackIndex += 1) {
       if (autoTransferRunIdRef.current !== runId) break;
 
@@ -1413,81 +1501,29 @@ function runTransferOnlyIfSourceHasParticles({
 
       if (autoTransferRunIdRef.current !== runId) break;
 
-      transferPositronsFromBgtToStacker();
+      await runQueuedPopulationTransfer({
+        animation,
+        route: routes.positronsBgtToStacker,
+        species: "positron",
+        sourceTrapId: "sourceBgt",
+        destinationTrapId: "stacker",
+        transferFraction: positronBgtToAccumulatorTransferFraction,
+      });
 
-      await delay(transferDuration + autoTransferSettlingDelay);
+      await delay(autoTransferSettlingDelay);
     }
-
+  } finally {
     if (autoTransferRunIdRef.current === runId) {
       setAutoTransferIsRunning(false);
     }
+
+    setButtonLocks(lockedButtonIds, false);
   }
+}
 
-  function stopAutoBgtToStackerTransfers() {
-    autoTransferRunIdRef.current += 1;
-    setAutoTransferIsRunning(false);
-  }
-
-  function toggleAutoBgtToStackerTransfers() {
-    if (autoTransferIsRunning) {
-      stopAutoBgtToStackerTransfers();
-      return;
-    }
-
-    runAutoBgtToStackerTransfers();
-  }
-
-  async function runAutoAccumulatorToCuspTransfers() {
-    if (autoAccumulatorToCuspIsRunning) return;
-
-    const runId = autoAccumulatorToCuspRunIdRef.current + 1;
-    autoAccumulatorToCuspRunIdRef.current = runId;
-    setAutoAccumulatorToCuspIsRunning(true);
-
-    const transferDuration = Math.max(
-      (totalRouteLength(routes.positronsStackerToCusp) / particleSpeed) * 1000,
-      1
-    );
-
-    for (
-      let transferIndex = 0;
-      transferIndex < accumulatorToCuspTransferCount;
-      transferIndex += 1
-    ) {
-      if (autoAccumulatorToCuspRunIdRef.current !== runId) break;
-
-      await delay(bgtAccumulationTimeSeconds * 1000 + autoTransferSettlingDelay);
-
-      if (autoAccumulatorToCuspRunIdRef.current !== runId) break;
-
-      transferPositronsFromStackerToCusp();
-
-      await delay(transferDuration + autoTransferSettlingDelay);
-    }
-
-    if (autoAccumulatorToCuspRunIdRef.current === runId) {
-      setAutoAccumulatorToCuspIsRunning(false);
-    }
-  }
-
-  function stopAutoAccumulatorToCuspTransfers() {
-    autoAccumulatorToCuspRunIdRef.current += 1;
-    setAutoAccumulatorToCuspIsRunning(false);
-  }
-
-  function toggleAutoAccumulatorToCuspTransfers() {
-    if (autoAccumulatorToCuspIsRunning) {
-      stopAutoAccumulatorToCuspTransfers();
-      return;
-    }
-
-    runAutoAccumulatorToCuspTransfers();
-  }
   function clearAll() {
     autoTransferRunIdRef.current += 1;
-    autoAccumulatorToCuspRunIdRef.current += 1;
     setAutoTransferIsRunning(false);
-    setAutoAccumulatorToCuspIsRunning(false);
     setSourceIsActive(false);
 
     if (sourceActivityIntervalRef.current !== null) {
@@ -1718,9 +1754,7 @@ function runTransferOnlyIfSourceHasParticles({
                 fontSize: "0.85rem",
               }}
             >
-              Antiproton transfers: {musashiToCuspTransferCount} ({Math.round(
-                musashiToCuspTransferFractionForCount(musashiToCuspTransferCount) * 100
-              )}% delivered)
+              Antiproton transfers: {musashiToCuspTransferCount}
               <input
                 type="range"
                 min={minMusashiToCuspTransferCount}
@@ -1743,12 +1777,68 @@ function runTransferOnlyIfSourceHasParticles({
 
           <ActionGroup title="Positron system">
             <div style={{ display: "grid", gap: "0.35rem" }}>
-              <ToggleSwitch
-                checked={sourceIsActive}
-                onChange={toggleSourceToBgt}
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.75rem",
+                  color: "#475569",
+                  fontSize: "0.85rem",
+                  cursor: isButtonLocked("sourceBgt.transferPositrons")
+                    ? "not-allowed"
+                    : "pointer",
+                  opacity: isButtonLocked("sourceBgt.transferPositrons")
+                    ? 0.55
+                    : 1,
+                }}
               >
-                Turn on positron system
-              </ToggleSwitch>
+                <span>
+                  {sourceIsActive
+                    ? "Positron system on"
+                    : "Positron system off"}
+                </span>
+
+                <input
+                  type="checkbox"
+                  checked={sourceIsActive}
+                  disabled={isButtonLocked("sourceBgt.transferPositrons")}
+                  onChange={toggleSourceToBgt}
+                  style={{
+                    position: "absolute",
+                    opacity: 0,
+                    pointerEvents: "none",
+                  }}
+                />
+
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "relative",
+                    width: "44px",
+                    height: "24px",
+                    borderRadius: "999px",
+                    background: sourceIsActive ? "#22c55e" : "#cbd5e1",
+                    transition: "background 160ms ease",
+                    boxShadow: "inset 0 1px 3px rgba(15, 23, 42, 0.22)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "3px",
+                      left: sourceIsActive ? "23px" : "3px",
+                      width: "18px",
+                      height: "18px",
+                      borderRadius: "999px",
+                      background: "#ffffff",
+                      transition: "left 160ms ease",
+                      boxShadow: "0 1px 3px rgba(15, 23, 42, 0.3)",
+                    }}
+                  />
+                </span>
+              </label>
 
               <label
                 style={{
@@ -1817,54 +1907,39 @@ function runTransferOnlyIfSourceHasParticles({
               </label>
             </div>
 
-            <ActionButton onClick={transferPositronsFromBgtToStacker}>
+            <ActionButton
+              disabled={isButtonLocked("sourceBgt.transferPositrons")}
+              onClick={() => void transferPositronsFromBgtToStacker()}
+            >
               Positrons from Positron system to accumulator
             </ActionButton>
 
-          <ToggleSwitch
-            checked={autoTransferIsRunning}
-            onChange={toggleAutoBgtToStackerTransfers}
-          >
-            Auto transfer to Accumulator
-          </ToggleSwitch>
+            <ActionButton
+              disabled={
+                autoTransferIsRunning ||
+                isButtonLocked("sourceBgt.transferPositrons")
+              }
+              onClick={() => void runAutoBgtToStackerTransfers()}
+            >
+              {autoTransferIsRunning
+                ? "Running transfers to Accumulator..."
+                : "Auto transfer to Accumulator"}
+            </ActionButton>
           </ActionGroup>
 
           <ActionGroup title="Accumulator">
-            <ActionButton onClick={transferPositronsFromStackerToCusp}>
+            <ActionButton
+              disabled={isButtonLocked("stacker.transferPositrons")}
+              onClick={() => void transferPositronsFromStackerToCusp()}
+            >
               Send positrons to the mixing trap
             </ActionButton>
 
-            <label
-              style={{
-                display: "grid",
-                gap: "0.25rem",
-                color: "#475569",
-                fontSize: "0.85rem",
-              }}
-            >
-              Transfers to mixing trap: {accumulatorToCuspTransferCount}
-              <input
-                type="range"
-                min={minAccumulatorToCuspTransferCount}
-                max={maxAccumulatorToCuspTransferCount}
-                step="1"
-                value={accumulatorToCuspTransferCount}
-                onChange={(event) =>
-                  setAccumulatorToCuspTransferCount(Number(event.target.value))
-                }
-              />
-            </label>
-
-            <ToggleSwitch
-              checked={autoAccumulatorToCuspIsRunning}
-              onChange={toggleAutoAccumulatorToCuspTransfers}
-            >
-              Auto transfer to mixing trap
-            </ToggleSwitch>
           </ActionGroup>
 
           <ActionGroup title="Mixing trap">
             <ActionButton
+              disabled={isButtonLocked("cusp.loadElectrons")}
               onClick={() =>
                 runAction({
                   sequence: actionSequences.loadElectronsIntoCusp,
@@ -1882,6 +1957,7 @@ function runTransferOnlyIfSourceHasParticles({
             </ActionButton>
 
             <ActionButton
+              disabled={isButtonLocked("cusp.kickElectrons")}
               onClick={() =>
                 runActionOnlyIfPopulationExists({
                   trapId: "cusp",
@@ -1903,11 +1979,19 @@ function runTransferOnlyIfSourceHasParticles({
               Kick out electrons
             </ActionButton>
 
-            <ActionButton onClick={mixPositronsAndAntiprotons}>
+            <ActionButton
+              disabled={isButtonLocked("cusp.mix")}
+              onClick={mixPositronsAndAntiprotons}
+            >
               Mix positrons and antiprotons
             </ActionButton>
 
-            <ActionButton onClick={analyzePlasma}>Analyze plasma</ActionButton>
+            <ActionButton
+              disabled={isButtonLocked("cusp.analyze")}
+              onClick={analyzePlasma}
+            >
+              Analyze plasma
+            </ActionButton>
 
             {analysisReport && (
               <div
@@ -2027,64 +2111,6 @@ function ActionButton({
       }}
     >
       {children}
-    </button>
-  );
-}
-
-function ToggleSwitch({
-  checked,
-  onChange,
-  children,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "0.75rem",
-        padding: "0.65rem 0.85rem",
-        border: "1px solid #cbd5e1",
-        borderRadius: "8px",
-        background: checked ? "#fee2e2" : "white",
-        cursor: "pointer",
-        textAlign: "left",
-      }}
-    >
-      <span>{children}</span>
-      <span
-        aria-hidden="true"
-        style={{
-          position: "relative",
-          flex: "0 0 auto",
-          width: "38px",
-          height: "22px",
-          borderRadius: "999px",
-          background: checked ? "#ef4444" : "#cbd5e1",
-          transition: "background 160ms ease",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: "3px",
-            left: checked ? "19px" : "3px",
-            width: "16px",
-            height: "16px",
-            borderRadius: "999px",
-            background: "white",
-            transition: "left 160ms ease",
-          }}
-        />
-      </span>
     </button>
   );
 }
