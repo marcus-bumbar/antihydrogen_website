@@ -1560,17 +1560,67 @@ async function runAutoBgtToStackerTransfers() {
     setTrapVoltages(initialVoltages);
   }
 
-  function mixPositronsAndAntiprotons() {
-    runAction({
-      sequence: actionSequences.mixPositronsAndAntiprotons,
-      duration: stageOnlyDuration,
+  function loadElectronsIntoCusp() {
+    void runLockedQueuedAnimation(animationQueues.loadElectronsIntoCusp, {
       onComplete: () => {
         setStoredPopulations((current) => {
-          const afterAntiprotons = removePopulation(current, "cusp", "antiproton");
-          return removePopulation(afterAntiprotons, "cusp", "positron");
+          const next = addPopulation(
+            current,
+            "cusp",
+            "electron",
+            getLastTrapZ(routes.electronsIntoCusp, "cusp")
+          );
+
+          storedPopulationsRef.current = next;
+          return next;
         });
       },
     });
+  }
+
+  function kickElectronsFromCusp() {
+    const electronPopulation = storedPopulationsRef.current.cusp.electron;
+
+    if (!electronPopulation) return;
+
+    const kickedParticleNumber =
+      electronPopulation.particleNumber * electronKickRemovalFraction;
+    const kickedRadius = particleRadiusForTrapParticleNumber(
+      kickedParticleNumber,
+      "electron",
+      "cusp"
+    );
+
+    void runLockedQueuedAnimation(animationQueues.kickElectronsOutOfCusp, {
+      particleRadiusBySpecies: {
+        electron: kickedRadius,
+      },
+    });
+  }
+
+  function mixPositronsAndAntiprotons() {
+    void runLockedQueuedAnimation(
+      animationQueues.mixPositronsAndAntiprotonsInCusp,
+      {
+        onComplete: () => {
+          setStoredPopulations((current) => {
+            const afterAntiprotons = removePopulation(
+              current,
+              "cusp",
+              "antiproton"
+            );
+            const afterPositrons = removePopulation(
+              afterAntiprotons,
+              "cusp",
+              "positron"
+            );
+
+            storedPopulationsRef.current = afterPositrons;
+            return afterPositrons;
+          });
+        },
+      }
+    );
   }
 
   function analyzePlasma() {
@@ -1600,28 +1650,33 @@ async function runAutoBgtToStackerTransfers() {
       (population) => population.species === "positron"
     );
 
-    setStoredPopulations((current) => ({
-      ...current,
-      cusp: {},
-    }));
+    const hiddenMoveSpecies: Species[] = [];
+    const particleRadiusBySpecies: Partial<Record<Species, number>> = {};
 
     if (antiprotonPopulation) {
-      runAction({
-        sequence: actionSequences.analyzeCuspPlasma,
-        route: routes.antiprotonsCuspToUs,
-        species: "antiproton",
-        particleRadius: antiprotonPopulation.radius,
-      });
+      particleRadiusBySpecies.antiproton = antiprotonPopulation.radius;
+    } else {
+      hiddenMoveSpecies.push("antiproton");
     }
 
     if (positronPopulation) {
-      runAction({
-        sequence: actionSequences.analyzeCuspPlasma,
-        route: routes.positronsCuspToUs,
-        species: "positron",
-        particleRadius: positronPopulation.radius,
-      });
+      particleRadiusBySpecies.positron = positronPopulation.radius;
+    } else {
+      hiddenMoveSpecies.push("positron");
     }
+
+    const nextPopulations = {
+      ...storedPopulationsRef.current,
+      cusp: {},
+    };
+
+    storedPopulationsRef.current = nextPopulations;
+    setStoredPopulations(nextPopulations);
+
+    void runLockedQueuedAnimation(animationQueues.analyzeCuspPlasma, {
+      hiddenMoveSpecies,
+      particleRadiusBySpecies,
+    });
   }
 
 
@@ -1940,41 +1995,14 @@ async function runAutoBgtToStackerTransfers() {
           <ActionGroup title="Mixing trap">
             <ActionButton
               disabled={isButtonLocked("cusp.loadElectrons")}
-              onClick={() =>
-                runAction({
-                  sequence: actionSequences.loadElectronsIntoCusp,
-                  route: routes.electronsIntoCusp,
-                  species: "electron",
-                  destination: {
-                    trapId: "cusp",
-                    species: "electron",
-                    z: getLastTrapZ(routes.electronsIntoCusp, "cusp"),
-                  },
-                })
-              }
+              onClick={loadElectronsIntoCusp}
             >
               Load electrons
             </ActionButton>
 
             <ActionButton
               disabled={isButtonLocked("cusp.kickElectrons")}
-              onClick={() =>
-                runActionOnlyIfPopulationExists({
-                  trapId: "cusp",
-                  species: "electron",
-                  action: () =>
-                    runAction({
-                      sequence: actionSequences.kickElectronsFromCusp,
-                      route: routes.electronsOutOfCuspToUs,
-                      species: "electron",
-                      source: {
-                        trapId: "cusp",
-                        species: "electron",
-                        particleFraction: electronKickRemovalFraction,
-                      },
-                    }),
-                })
-              }
+              onClick={kickElectronsFromCusp}
             >
               Kick out electrons
             </ActionButton>

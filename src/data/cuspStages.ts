@@ -15,21 +15,16 @@ export const cuspStages = {
   },
   loadElectrons2: {
     name: "Load Cusp e− 2",
-    voltages: [-0, 0, 0, 0, 0, 0, -100, 0, 0, 0],
+    voltages: [-100, 0, 0, 0, 0, 0, -100, 0, 0, 0],
     description: "Compress electrons in the Cusp.",
   },
   loadElectrons3: {
     name: "Load Cusp e− 3",
-    voltages: [0, 0, 0, 0, 0, 0, -100, 0, 0, 0],
+    voltages: [-100, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Electrons are trapped in the Cusp.",
   },
   loadElectrons4: {
-    name: "Load Cusp e− 4",
-    voltages: [-50, 0, 50, 0, 0, 0, -100, 0, 0, 0],
-    description: "Electrons are trapped in the Cusp.",
-  },
-  loadElectrons5: {
-    name: "Load Cusp e− 5",
+    name: "Load Cusp e− 3",
     voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Electrons are trapped in the Cusp.",
   },
@@ -42,38 +37,43 @@ export const cuspStages = {
   },
   kickElectrons2: {
     name: "Kick Cusp e− 2",
-    voltages: [-100, 0, 50, -100, 0, 0, -100, 0, 0, 0],
-    description: "Lower one barrier.",
-  },
-  kickElectrons3: {
-    name: "Kick Cusp e− 3",
     voltages: [-100, 0, 0, -100, 0, 0, -100, 0, 0, 0],
     description: "Electrons up",
   },
-  kickElectrons4: {
-    name: "Kick Cusp e− 4",
+  kickElectrons3: {
+    name: "Kick Cusp e− 3",
     voltages: [0, 0, 0, -100, 0, 0, -100, 0, 0, 0],
     description: "Electrons leave the Cusp.",
   },
-  kickElectrons5: {
-    name: "Kick Cusp e− 5",
+   kickElectrons4: {
+    name: "Kick Cusp e− 4",
     voltages: [-100, 0, 0, -100, 0, 0, -100, 0, 0, 0],
+    description: "close pbar well",
+  },
+    kickElectrons5: {
+    name: "Kick Cusp e− 5",
+    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "close pbar well",
   },
 
   receiveAntiprotons1: {
     name: "Receive p̄ 1",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Open Cusp entrance for antiprotons.",
   },
   receiveAntiprotons2: {
     name: "Receive p̄ 2",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+  voltages: [-100, 0, 0, 0, 0, 0, -100, 0, 0, 0],
     description: "Antiprotons enter the Cusp.",
   },
   receiveAntiprotons3: {
     name: "Receive p̄ 3",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [-100, 0, 50, 0, 0, 0, -100, 0, 0, 0],
+    description: "Antiprotons are captured in the Cusp.",
+  },
+    receiveAntiprotons4: {
+    name: "Receive p̄ 4",
+    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Antiprotons are captured in the Cusp.",
   },
 

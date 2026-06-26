@@ -82,7 +82,7 @@ export const traps: Record<TrapId, TrapConfig> = {
     name: "Mixing trap",
     Svg: CuspSvg,
     electrodes: cuspElectrodes,
-    initialVoltages: [0, 0, 0, 80, 0, 0, -100, 0, 0, 0],
+    initialVoltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     potentialYAxis: {
       yMin: -130,
       yMax: 130,

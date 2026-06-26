@@ -79,6 +79,12 @@ const cuspActionLocks: ButtonLockId[] = [
   "cusp.analyze",
 ];
 
+const cuspButtonExecutionLocks: ButtonLockId[] = [
+  ...cuspActionLocks,
+  "stacker.transferPositrons",
+  "musashi.transferAntiprotons",
+];
+
 const sourceBgtActionLocks: ButtonLockId[] = [
   "sourceBgt.transferPositrons",
 ];
@@ -562,6 +568,12 @@ export const animationQueues: Record<string, QueuedAnimation> = {
             duration: 180,
           },
           {
+            type: "resetTrap",
+            trapId: "cusp",
+            duration: 0,
+            preserveSpecies: ["positron"],
+            },
+          {
             type: "stage",
             trapId: "cusp",
             stageKey: "receivePositrons1",
@@ -627,6 +639,283 @@ export const animationQueues: Record<string, QueuedAnimation> = {
             trapId: "cusp",
             stageKey: "receivePositrons3",
             duration: 180,
+          },
+        ],
+      },
+    ],
+  },
+
+
+  loadElectronsIntoCusp: {
+    lockedButtons: cuspButtonExecutionLocks,
+
+    steps: [
+      {
+        type: "parallel",
+        steps: [
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "stage",
+                trapId: "cusp",
+                stageKey: "loadElectrons1",
+                duration: 200,
+              },
+            ],
+          },
+          {
+            type: "sequence",
+            steps: [
+                {
+                type: "resetTrap",
+                trapId: "cusp",
+                duration: 400,
+                preserveSpecies: ["positron"]
+              },
+
+              {
+                type: "move",
+                duration: 650,
+                particles: [
+                  {
+                    species: "electron",
+                    route: inTrapRoute("cusp", -10, 180),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "parallel",
+        steps: [
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "stage",
+                trapId: "cusp",
+                stageKey: "loadElectrons2",
+                duration: 200,
+              },
+            ],
+          },
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "move",
+                duration: 600,
+                particles: [
+                  {
+                    species: "electron",
+                    route: inTrapRoute("cusp", 180, 50),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "parallel",
+        steps: [
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "stage",
+                trapId: "cusp",
+                stageKey: "loadElectrons3",
+                duration: 200,
+              },
+            ],
+          },
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "move",
+                duration: 850,
+                particles: [
+                  {
+                    species: "electron",
+                    route: inTrapRoute("cusp", 50, 120),
+                  },
+                ],
+              },
+              {
+                type: "move",
+                duration: 1000,
+                particles: [
+                  {
+                    species: "electron",
+                    route: inTrapRoute("cusp", 120, 93),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "parallel",
+        steps: [
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "stage",
+                trapId: "cusp",
+                stageKey: "loadElectrons4",
+                duration: 200,
+              },
+            ],
+          },
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "move",
+                duration: 200,
+                particles: [
+                  {
+                    species: "electron",
+                    route: inTrapRoute("cusp", 93, 93),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+
+    ],
+  },
+
+  kickElectronsOutOfCusp: {
+    lockedButtons: cuspButtonExecutionLocks,
+
+    steps: [
+      {
+        type: "stage",
+        trapId: "cusp",
+        stageKey: "kickElectrons1",
+        duration: 400,
+      },
+      {
+        type: "stage",
+        trapId: "cusp",
+        stageKey: "kickElectrons2",
+        duration: 400,
+      },
+      {
+        type: "sequence",
+        steps: [
+          {
+            type: "stage",
+            trapId: "cusp",
+            stageKey: "kickElectrons3",
+            duration: 120,
+          },
+          {
+            type: "move",
+            duration: 200,
+            particles: [
+              {
+                species: "electron",
+                route: inTrapRoute("cusp", 93, -10),
+              },
+            ],
+          },
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "stage",
+                trapId: "cusp",
+                stageKey: "kickElectrons4",
+                duration: 180,
+              },
+            ],
+          },
+
+
+          {
+            type: "sequence",
+            steps: [
+              {
+                type: "stage",
+                trapId: "cusp",
+                stageKey: "kickElectrons5",
+                duration: 180,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "removePopulationFraction",
+        trapId: "cusp",
+        species: "electron",
+        fraction: 0.8,
+      },
+    ],
+  },
+
+  mixPositronsAndAntiprotonsInCusp: {
+    lockedButtons: cuspButtonExecutionLocks,
+
+    steps: [
+      {
+        type: "stage",
+        trapId: "cusp",
+        stageKey: "mix1",
+        duration: 600,
+      },
+      {
+        type: "stage",
+        trapId: "cusp",
+        stageKey: "mix2",
+        duration: 600,
+      },
+      {
+        type: "stage",
+        trapId: "cusp",
+        stageKey: "mix3",
+        duration: 600,
+      },
+    ],
+  },
+
+  analyzeCuspPlasma: {
+    lockedButtons: cuspButtonExecutionLocks,
+
+    steps: [
+      {
+        type: "parallel",
+        steps: [
+          {
+            type: "move",
+            duration: 2400,
+            particles: [
+              {
+                species: "antiproton",
+                route: routes.antiprotonsCuspToUs,
+              },
+            ],
+          },
+          {
+            type: "move",
+            duration: 900,
+            particles: [
+              {
+                species: "positron",
+                route: routes.positronsCuspToUs,
+              },
+            ],
           },
         ],
       },

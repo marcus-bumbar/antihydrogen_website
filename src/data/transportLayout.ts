@@ -137,7 +137,7 @@ export const transportLayout = {
         end: { x: 1120, y: 250 },
         trapId: "cusp",
         trapZStart: 20,
-        trapZEnd: 110,
+        trapZEnd: 93,
         showOverlay: false,
       },
     ],
