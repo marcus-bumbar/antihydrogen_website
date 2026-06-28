@@ -52,6 +52,11 @@ const positronToAntiprotonRatioForFullAntihydrogenYield = 40;
 const antihydrogenYieldHalfConversionRatio = 1;
 const minMusashiToCuspTransferCount = 1;
 const maxMusashiToCuspTransferCount = 5;
+const minInjectionEnergyKeV = 100;
+const maxInjectionEnergyKeV = 120;
+const defaultInjectionEnergyKeV = 100;
+const minMusashiInjectionTransmission = 0.2;
+const maxMusashiInjectionTransmission = 1;
 
 const antiprotonMusashiTrapFractionWithoutElectrons = 0.1;
 const antiprotonCuspTrapFractionWithoutElectrons = 0.3;
@@ -77,6 +82,23 @@ function sourceIntervalFromActivityGBq(activityGBq: number) {
     clamped * (maxSourceIntervalSeconds - minSourceIntervalSeconds)
   );
 }
+
+function musashiInjectionTransmissionFromEnergy(energyKeV: number) {
+  const normalized =
+    maxInjectionEnergyKeV === minInjectionEnergyKeV
+      ? 0
+      : (energyKeV - minInjectionEnergyKeV) /
+        (maxInjectionEnergyKeV - minInjectionEnergyKeV);
+
+  const clamped = Math.min(Math.max(normalized, 0), 1);
+
+  return (
+    minMusashiInjectionTransmission +
+    clamped *
+      (maxMusashiInjectionTransmission - minMusashiInjectionTransmission)
+  );
+}
+
 
 type MovingBunch = {
   id: string;
@@ -365,7 +387,10 @@ function antihydrogenYield({
   const rawYield = antiprotonNumber * conversionRate;
   const electronCorrectedYield = rawYield - electronNumber;
 
-  return Math.max(0, Math.min(antiprotonNumber, electronCorrectedYield));
+  return Math.max(
+    0,
+    Math.min(antiprotonNumber, positronNumber, electronCorrectedYield)
+  );
 }
 
 function clampedMusashiToCuspTransferCount(transferCount: number) {
@@ -530,7 +555,10 @@ function App() {
   const [bgtAccumulationTimeSeconds, setBgtAccumulationTimeSeconds] = useState(2);
   const [bgtStackCount, setBgtStackCount] = useState(5);
   const [autoTransferIsRunning, setAutoTransferIsRunning] = useState(false);
-  const [musashiToCuspTransferCount, setMusashiToCuspTransferCount] = useState(1);
+  const [musashiToCuspTransferCount] = useState(1);
+  const [injectionEnergyKeV, setInjectionEnergyKeV] = useState(
+    defaultInjectionEnergyKeV
+  );
   const [analysisReport, setAnalysisReport] = useState<string | null>(null);
 
   const lockedButtonsRef = useRef<Set<ButtonLockId>>(new Set());
@@ -539,6 +567,8 @@ function App() {
   );
 
   const sourceActivityIntervalSeconds = sourceIntervalFromActivityGBq(sourceActivityGBq);
+  const musashiInjectionTransmission =
+    musashiInjectionTransmissionFromEnergy(injectionEnergyKeV);
 
   const [trapStageKeys, setTrapStageKeys] = useState<TrapStageKeys>({
     musashi: "idle",
@@ -1276,7 +1306,8 @@ function removePopulationFractionFromQueue({
     return 1;
   }
   function trapAntiprotonsInMusashi() {
-    const trappingFraction = musashiAntiprotonTrappingFraction();
+    const trappingFraction =
+      musashiAntiprotonTrappingFraction() * musashiInjectionTransmission;
     const fullMetrics = populationMetricsForTrap(1, "antiproton", "musashi");
     const trappedParticleNumber =
       fullMetrics.particleNumber * trappingFraction;
@@ -1734,20 +1765,20 @@ async function runAutoBgtToStackerTransfers() {
       electronNumber,
     });
 
-    setAnalysisReport(
-      [
-        `Antihydrogen produced: ${Math.round(
-          producedAntihydrogen
-        ).toLocaleString()} atoms`,
-        `Antiprotons available: ${Math.round(
-          antiprotonNumber
-        ).toLocaleString()}`,
-        `Positrons available: ${Math.round(positronNumber).toLocaleString()}`,
-        `Leftover electrons subtracted: ${Math.round(
-          electronNumber
-        ).toLocaleString()}`,
-      ].join("\n")
-    );
+    const mixReport = [
+      `Antihydrogen produced: ${Math.round(
+        producedAntihydrogen
+      ).toLocaleString()} atoms`,
+      `Antiprotons available: ${Math.round(
+        antiprotonNumber
+      ).toLocaleString()}`,
+      `Positrons available: ${Math.round(positronNumber).toLocaleString()}`,
+      `Leftover electrons subtracted: ${Math.round(
+        electronNumber
+      ).toLocaleString()}`,
+    ].join("\n");
+
+    setAnalysisReport(null);
 
     void runLockedQueuedAnimation(
       animationQueues.mixPositronsAndAntiprotonsInCusp,
@@ -1768,10 +1799,13 @@ async function runAutoBgtToStackerTransfers() {
             storedPopulationsRef.current = afterPositrons;
             return afterPositrons;
           });
+
+          setAnalysisReport(mixReport);
         },
       }
     );
   }
+
 
 
   const [busyTraps, setBusyTraps] = useState<Record<TrapId, boolean>>({
@@ -1894,7 +1928,6 @@ async function runAutoBgtToStackerTransfers() {
             >
               Kick out electrons
             </ActionButton>
-
             <label
               style={{
                 display: "grid",
@@ -1903,18 +1936,23 @@ async function runAutoBgtToStackerTransfers() {
                 fontSize: "0.85rem",
               }}
             >
-              Antiproton transfers: {musashiToCuspTransferCount}
+              Injection energy: {injectionEnergyKeV.toFixed(0)} keV
               <input
                 type="range"
-                min={minMusashiToCuspTransferCount}
-                max={maxMusashiToCuspTransferCount}
+                min={minInjectionEnergyKeV}
+                max={maxInjectionEnergyKeV}
                 step="1"
-                value={musashiToCuspTransferCount}
+                value={injectionEnergyKeV}
                 onChange={(event) =>
-                  setMusashiToCuspTransferCount(Number(event.target.value))
+                  setInjectionEnergyKeV(Number(event.target.value))
                 }
               />
+              <span style={{ color: "#64748b", fontSize: "0.78rem" }}>
+                MUSASHI transmission:{" "}
+                {(musashiInjectionTransmission * 100).toFixed(0)}%
+              </span>
             </label>
+
 
             <ActionButton
               disabled={isButtonLocked("musashi.transferAntiprotons")}
