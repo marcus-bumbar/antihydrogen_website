@@ -45,7 +45,7 @@ export const cuspStages = {
     voltages: [0, 0, 0, -100, 0, 0, -100, 0, 0, 0],
     description: "Electrons leave the Cusp.",
   },
-   kickElectrons4: {
+    kickElectrons4: {
     name: "Kick Cusp e− 4",
     voltages: [-100, 0, 0, -100, 0, 0, -100, 0, 0, 0],
     description: "close pbar well",
@@ -79,33 +79,63 @@ export const cuspStages = {
 
   receivePositrons1: {
     name: "Receive e+ 1",
-    voltages: [80, 30, 30, 30, 30, 30, 30, 30, 30, 80],
+    voltages: [80, 30, 30, 30, 30, 30, 0, 30, 30, 80],
     description: "Open Cusp for incoming positrons.",
   },
   receivePositrons2: {
     name: "Receive e+ 2",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [30, 30, 30, 30, 30, 30, 0, 30, 30, 80],
     description: "Positrons enter the Cusp.",
   },
   receivePositrons3: {
     name: "Receive e+ 3",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [80,80, 30, 30, 30, 30, -100, 30, 30, 80],
+    description: "Positrons are held for mixing.",
+  },
+    receivePositrons4: {
+    name: "Receive e+ 4",
+    voltages: [0,0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Positrons are held for mixing.",
   },
 
   mix1: {
     name: "Mix 1",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [0, 0, 50, 0, 0, 0, -100, 0, 0, 0],
     description: "Nested well is prepared.",
   },
   mix2: {
     name: "Mix 2",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [0, 0, 50, 50, 0, 0, -100, 0, 0, 0],
     description: "Antiprotons and positrons overlap.",
   },
   mix3: {
     name: "Mix 3",
-    voltages: [80, 30, 0, -10, -30, -10, 0, 10, 30, 80],
+    voltages: [0, 0, 0, 50, 0, 0, -100, 0, 0, 0],
+    description: "Antihydrogen production region.",
+  },
+  mix4: {
+    name: "Mix 4",
+    voltages: [0, 0, 0, 50, 50, 0, -100, 0, 0, 0],
+    description: "Antihydrogen production region.",
+  },
+  mix5: {
+    name: "Mix 5",
+    voltages: [0, 0, 0, 0, 50, 0, -100, 0, 0, 0],
+    description: "Antihydrogen production region.",
+  },
+  mix6: {
+    name: "Mix 6",
+    voltages: [0, 0, 0, 0, 50, 50, -100, 50, 0, 0],
+    description: "Antihydrogen production region.",
+  },
+  mix7: {
+    name: "Mix 7",
+    voltages: [0, 0, 0, 0, 0, 50, -100, 50, 0, 0],
+    description: "Antihydrogen production region.",
+  },
+mix8: {
+    name: "Mix 8",
+    voltages: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     description: "Antihydrogen production region.",
   },
 } satisfies Record<string, TrapStage>;

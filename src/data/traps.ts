@@ -94,7 +94,7 @@ export const traps: Record<TrapId, TrapConfig> = {
     name: "Positron system",
     Svg: SourceBgtSvg,
     electrodes: sourceBgtElectrodes,
-    initialVoltages: [30, 18, 25, 25, 27, 0],
+    initialVoltages: [10, -18, -5, -5, 7,0],
     potentialYAxis: {
       yMin: -50,
       yMax: 50,
@@ -106,7 +106,7 @@ export const traps: Record<TrapId, TrapConfig> = {
     name: "Accumulator",
     Svg: StackerSvg,
     electrodes: stackerElectrodes,
-    initialVoltages: [30, 10, -30, 10, 30],
+    initialVoltages: [30, 13, 15, 19, 30],
     potentialYAxis: {
       yMin: -50,
       yMax: 50,

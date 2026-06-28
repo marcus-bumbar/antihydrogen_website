@@ -893,6 +893,10 @@ function App() {
         await runParallelParticleMove(step, options);
       }
 
+      if (step.type === "moveStoredPopulation") {
+        await runStoredPopulationMove(step);
+      }
+
       if (step.type === "resetTrap") {
         await runTrapPopulationReset(step);
       }
@@ -1031,6 +1035,79 @@ function App() {
       animationRefs.current.add(frameId);
     });
   }
+
+function runStoredPopulationMove({
+  trapId,
+  species,
+  route,
+  duration,
+}: {
+  trapId: TrapId;
+  species: Species;
+  route: RouteSegment[];
+  duration: number;
+}) {
+  const startingPopulation = storedPopulationsRef.current[trapId][species];
+
+  if (!startingPopulation) {
+    return delay(duration);
+  }
+
+  return new Promise<void>((resolve) => {
+    const startTime = performance.now();
+
+    function setStoredPopulationZ(z: number) {
+      const currentPopulation = storedPopulationsRef.current[trapId][species];
+
+      if (!currentPopulation) return;
+
+      const nextPopulations = {
+        ...storedPopulationsRef.current,
+        [trapId]: {
+          ...storedPopulationsRef.current[trapId],
+          [species]: {
+            ...currentPopulation,
+            z,
+          },
+        },
+      };
+
+      storedPopulationsRef.current = nextPopulations;
+      setStoredPopulations(nextPopulations);
+    }
+
+    function animate(currentTime: number) {
+      const elapsed = currentTime - startTime;
+      const progress =
+        duration <= 0 ? 1 : Math.min(elapsed / duration, 1);
+
+      const movingState = bunchStateFromRoute(
+        {
+          id: startingPopulation.id,
+          species,
+          color: startingPopulation.color,
+          radius: startingPopulation.radius,
+          route,
+        },
+        progress
+      );
+
+      if (movingState.trapZ !== null) {
+        setStoredPopulationZ(movingState.trapZ);
+      }
+
+      if (progress < 1) {
+        const frameId = requestAnimationFrame(animate);
+        animationRefs.current.add(frameId);
+      } else {
+        resolve();
+      }
+    }
+
+    const frameId = requestAnimationFrame(animate);
+    animationRefs.current.add(frameId);
+  });
+}
 
 function resetExitZForTrap(trapId: TrapId) {
   const leftEdge = Math.min(
@@ -1326,7 +1403,7 @@ function removePopulationFractionFromQueue({
 
   function runSourceToBgtPulse() {
     runAction({
-      sequence: actionSequences.loadPositronsIntoSourceBgt,
+      sequence: [],
       route: routes.positronsSourceToBgt,
       species: "positron",
       particleRadius: populationMetricsForTrap(
@@ -1341,7 +1418,6 @@ function removePopulationFractionFromQueue({
       },
     });
   }
-
 async function runQueuedPopulationTransfer({
   animation,
   route,

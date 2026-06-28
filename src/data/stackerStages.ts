@@ -10,12 +10,12 @@ export const stackerStages = {
 
   receivePositrons1: {
     name: "Receive e+ 1",
-    voltages: [50, 20, -10, 0, 0],
+    voltages: [30, 13, 15, 17, 17],
     description: "Open the Stacker to load.",
   },
   receivePositrons2: {
     name: "Receive e+ 2",
-    voltages: [50, 20, -40, 20, 50],
+    voltages: [30, 13, 15, 17,30],
     description: "Trap positrons.",
   },
   receivePositrons3: {
@@ -26,12 +26,12 @@ export const stackerStages = {
 
   sendPositrons1: {
     name: "Send e+ 1",
-    voltages: [0, 30, 30, 30, 60],
+    voltages: [40, 30, 30, 40, 40],
     description: "Extraction.",
   },
   sendPositrons2: {
     name: "Send e+ 2",
-    voltages: [60, 30, 30, 30, 60],
+    voltages: [30, 30, 30, 40, 40],
     description: "Release positrons.",
   },
   sendPositrons3: {
