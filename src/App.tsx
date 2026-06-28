@@ -9,7 +9,6 @@ import {
   populationMetricsForTrap,
   radiusFromParticleNumber,
   speciesColors,
-  speciesLabels,
   type Species,
   type StoredPopulation,
   type TrapParticleMarker,
@@ -48,7 +47,9 @@ const maxBgtAccumulationTimeSeconds: number = 8;
 const minBgtStackCount: number = 1;
 const maxBgtStackCount: number = 20;
 const autoTransferSettlingDelay = 120; // milliseconds
-const electronKickRemovalFraction = 0.8;
+const electronKickRemovalFraction = 0.99;
+const positronToAntiprotonRatioForFullAntihydrogenYield = 40;
+const antihydrogenYieldHalfConversionRatio = 1;
 const minMusashiToCuspTransferCount = 1;
 const maxMusashiToCuspTransferCount = 5;
 
@@ -322,6 +323,49 @@ function removePopulation(
 
 function clampFraction(fraction: number) {
   return Math.min(Math.max(fraction, 0), 1);
+}
+
+function antihydrogenConversionRate(
+  positronNumber: number,
+  antiprotonNumber: number
+) {
+  if (positronNumber <= 0 || antiprotonNumber <= 0) return 0;
+
+  const positronToAntiprotonRatio = positronNumber / antiprotonNumber;
+
+  if (
+    positronToAntiprotonRatio >=
+    positronToAntiprotonRatioForFullAntihydrogenYield
+  ) {
+    return 1;
+  }
+
+  const exponentialScale =
+    Math.log(2) / antihydrogenYieldHalfConversionRatio;
+
+  return clampFraction(
+    1 - Math.exp(-exponentialScale * positronToAntiprotonRatio)
+  );
+}
+
+function antihydrogenYield({
+  antiprotonNumber,
+  positronNumber,
+  electronNumber,
+}: {
+  antiprotonNumber: number;
+  positronNumber: number;
+  electronNumber: number;
+}) {
+  const conversionRate = antihydrogenConversionRate(
+    positronNumber,
+    antiprotonNumber
+  );
+
+  const rawYield = antiprotonNumber * conversionRate;
+  const electronCorrectedYield = rawYield - electronNumber;
+
+  return Math.max(0, Math.min(antiprotonNumber, electronCorrectedYield));
 }
 
 function clampedMusashiToCuspTransferCount(transferCount: number) {
@@ -1675,6 +1719,36 @@ async function runAutoBgtToStackerTransfers() {
   }
 
   function mixPositronsAndAntiprotons() {
+    const cuspPopulations = storedPopulationsRef.current.cusp;
+    const antiprotonPopulation = cuspPopulations.antiproton;
+    const positronPopulation = cuspPopulations.positron;
+    const electronPopulation = cuspPopulations.electron;
+
+    const antiprotonNumber = antiprotonPopulation?.particleNumber ?? 0;
+    const positronNumber = positronPopulation?.particleNumber ?? 0;
+    const electronNumber = electronPopulation?.particleNumber ?? 0;
+
+    const producedAntihydrogen = antihydrogenYield({
+      antiprotonNumber,
+      positronNumber,
+      electronNumber,
+    });
+
+    setAnalysisReport(
+      [
+        `Antihydrogen produced: ${Math.round(
+          producedAntihydrogen
+        ).toLocaleString()} atoms`,
+        `Antiprotons available: ${Math.round(
+          antiprotonNumber
+        ).toLocaleString()}`,
+        `Positrons available: ${Math.round(positronNumber).toLocaleString()}`,
+        `Leftover electrons subtracted: ${Math.round(
+          electronNumber
+        ).toLocaleString()}`,
+      ].join("\n")
+    );
+
     void runLockedQueuedAnimation(
       animationQueues.mixPositronsAndAntiprotonsInCusp,
       {
@@ -1697,62 +1771,6 @@ async function runAutoBgtToStackerTransfers() {
         },
       }
     );
-  }
-
-  function analyzePlasma() {
-    const cuspPopulations = (
-      Object.values(storedPopulationsRef.current.cusp) as StoredPopulation[]
-    ).filter(Boolean);
-
-    if (cuspPopulations.length === 0) {
-      setAnalysisReport("No plasma stored in the mixing trap.");
-      return;
-    }
-
-    const reportLines = cuspPopulations.map(
-      (population) =>
-        `${speciesLabels[population.species]}: ${Math.round(
-          population.particleNumber
-        ).toLocaleString()} particles`
-    );
-
-    setAnalysisReport(reportLines.join("\n"));
-
-    const antiprotonPopulation = cuspPopulations.find(
-      (population) => population.species === "antiproton"
-    );
-
-    const positronPopulation = cuspPopulations.find(
-      (population) => population.species === "positron"
-    );
-
-    const hiddenMoveSpecies: Species[] = [];
-    const particleRadiusBySpecies: Partial<Record<Species, number>> = {};
-
-    if (antiprotonPopulation) {
-      particleRadiusBySpecies.antiproton = antiprotonPopulation.radius;
-    } else {
-      hiddenMoveSpecies.push("antiproton");
-    }
-
-    if (positronPopulation) {
-      particleRadiusBySpecies.positron = positronPopulation.radius;
-    } else {
-      hiddenMoveSpecies.push("positron");
-    }
-
-    const nextPopulations = {
-      ...storedPopulationsRef.current,
-      cusp: {},
-    };
-
-    storedPopulationsRef.current = nextPopulations;
-    setStoredPopulations(nextPopulations);
-
-    void runLockedQueuedAnimation(animationQueues.analyzeCuspPlasma, {
-      hiddenMoveSpecies,
-      particleRadiusBySpecies,
-    });
   }
 
 
@@ -2088,13 +2106,6 @@ async function runAutoBgtToStackerTransfers() {
               onClick={mixPositronsAndAntiprotons}
             >
               Mix positrons and antiprotons
-            </ActionButton>
-
-            <ActionButton
-              disabled={isButtonLocked("cusp.analyze")}
-              onClick={analyzePlasma}
-            >
-              Analyze plasma
             </ActionButton>
 
             {analysisReport && (

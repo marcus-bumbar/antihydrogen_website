@@ -240,7 +240,7 @@ export const animationQueues: Record<string, QueuedAnimation> = {
                 type: "removePopulationFraction",
                 trapId: "musashi",
                 species: "electron",
-                fraction: 0.8,
+                fraction: 0.99,
             },
             {
                 type: "move",
@@ -1017,7 +1017,7 @@ kickElectronsOutOfCusp: {
                 type: "removePopulationFraction",
                 trapId: "cusp",
                 species: "electron",
-                fraction: 0.8,
+                fraction: 0.99,
             },
         ],
     },
