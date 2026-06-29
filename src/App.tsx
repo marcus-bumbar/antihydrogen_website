@@ -1877,7 +1877,7 @@ async function runAutoBgtToStackerTransfers() {
     >
       <section style={{ marginBottom: "1rem", textAlign: "center" }}>
         <h1 style={{ marginBottom: "0.75rem" }}>
-          Antihydrogen transport sequence
+          Antihydrogen production in ASACUSA
         </h1>
 
         <div
@@ -1947,10 +1947,6 @@ async function runAutoBgtToStackerTransfers() {
                   setInjectionEnergyKeV(Number(event.target.value))
                 }
               />
-              <span style={{ color: "#64748b", fontSize: "0.78rem" }}>
-                MUSASHI transmission:{" "}
-                {(musashiInjectionTransmission * 100).toFixed(0)}%
-              </span>
             </label>
 
 
@@ -2035,7 +2031,7 @@ async function runAutoBgtToStackerTransfers() {
                   fontSize: "0.85rem",
                 }}
               >
-                source activity: {sourceActivityGBq.toFixed(2)} GBq
+                source intensity: {sourceActivityGBq.toFixed(2)} GBq
                 <input
                   type="range"
                   min={minSourceActivityGBq}
@@ -2143,7 +2139,7 @@ async function runAutoBgtToStackerTransfers() {
               disabled={isButtonLocked("cusp.mix")}
               onClick={mixPositronsAndAntiprotons}
             >
-              Mix positrons and antiprotons
+              Mix or analyze plasma
             </ActionButton>
 
             {analysisReport && (
